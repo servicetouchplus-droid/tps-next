@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <script src="config.js"></script>
+    <script src="db.js"></script>
+    <script>
+        (function() {
+            const currentUser = TouchDb.getCurrentUser();
+            if (!currentUser || currentUser.role !== 'admin') {
+                window.location.replace("login.html");
+            }
+        })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console Admin – Touch+ Services</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    animation: {
+                        'count-up': 'countUp 0.6s ease-out forwards',
+                        'fade-in-up': 'fadeInUp 0.4s ease-out forwards',
+                        'pulse-dot': 'pulseDot 2s infinite',
+                    },
+                    keyframes: {
+                        countUp: { '0%': { opacity: 0, transform: 'translateY(12px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        fadeInUp: { '0%': { opacity: 0, transform: 'translateY(16px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        pulseDot: { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.5, transform: 'scale(1.4)' } },
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orange: #f97316;
+            --orange-dark: #ea6c08;
+            --yellow: #fbbf24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+
+        /* Scrollbar custom */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
+        .dark ::-webkit-scrollbar-thumb { background: #374151; }
+
+        /* Sidebar */
+        #sidebar { transition: transform 0.3s ease; }
+        @media (max-width: 1023px) {
+            #sidebar { transform: translateX(-100%); position: fixed; z-index: 40; height: 100vh; }
+            #sidebar.open { transform: translateX(0); }
+        }
+
+        /* KPI Cards */
+        .kpi-card {
+            background: white;
+            border-radius: 1.25rem;
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+            border: 1px solid #f3f4f6;
+            animation: fadeInUp 0.4s ease-out forwards;
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+        .kpi-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.1); transform: translateY(-2px); }
+        .dark .kpi-card { background: #1f2937; border-color: #374151; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        .kpi-icon { width: 3rem; height: 3rem; border-radius: 0.875rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .kpi-value { font-size: 1.75rem; font-weight: 900; line-height: 1; }
+        .kpi-label { font-size: 0.75rem; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+
+        /* Order Cards */
+        .order-card {
+            background: white;
+            border-radius: 1rem;
+            border: 1px solid #f3f4f6;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: box-shadow 0.2s, transform 0.2s;
+            animation: fadeInUp 0.35s ease-out forwards;
+            overflow: hidden;
+        }
+        .order-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.09); transform: translateY(-1px); }
+        .dark .order-card { background: #1f2937; border-color: #374151; }
+
+        /* Status strip */
+        .status-strip { height: 4px; width: 100%; }
+
+        /* Filter pill */
+        .filter-pill {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.4rem 0.9rem; border-radius: 9999px;
+            font-size: 0.75rem; font-weight: 700; cursor: pointer;
+            border: 2px solid transparent;
+            background: #f3f4f6; color: #374151;
+            transition: all 0.15s;
+        }
+        .filter-pill:hover { background: #fef3ec; color: var(--orange); border-color: #fed7aa; }
+        .filter-pill.active { background: var(--orange); color: white; border-color: var(--orange); }
+        .dark .filter-pill { background: #374151; color: #d1d5db; }
+        .dark .filter-pill:hover { background: #431407; color: #fb923c; border-color: #9a3412; }
+        .dark .filter-pill.active { background: var(--orange); color: white; border-color: var(--orange); }
+
+        /* Status badge */
+        .badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+
+        /* Action buttons */
+        .action-btn { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.9rem; border-radius: 0.625rem; font-size: 0.7rem; font-weight: 700; cursor: pointer; transition: all 0.15s; border: none; }
+
+        /* Modal */
+        .modal-overlay { backdrop-filter: blur(8px); }
+
+        /* Payment toggle */
+        .pay-btn { font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.15s; border: 1px solid; }
+
+        /* Sidebar nav items */
+        .sidebar-link { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.9rem; border-radius: 0.75rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.15s; color: #6b7280; }
+        .sidebar-link:hover, .sidebar-link.active { background: #fff7ed; color: var(--orange); }
+        .dark .sidebar-link:hover, .dark .sidebar-link.active { background: #431407; color: #fb923c; }
+        .sidebar-link .count { margin-left: auto; font-size: 0.65rem; font-weight: 800; background: #e5e7eb; color: #374151; padding: 0.1rem 0.45rem; border-radius: 9999px; }
+        .sidebar-link.active .count { background: #fed7aa; color: #92400e; }
+        .dark .sidebar-link .count { background: #374151; color: #9ca3af; }
+
+        /* Search input */
+        .search-wrap { position: relative; }
+        .search-wrap input { padding-left: 2.4rem; }
+        .search-wrap svg { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); }
+
+        /* Thumbnail */
+        .thumb { width: 2.75rem; height: 2.75rem; border-radius: 0.625rem; object-fit: cover; border: 2px solid #f3f4f6; flex-shrink: 0; }
+        .dark .thumb { border-color: #374151; }
+
+        /* Shine animation for KPI */
+        @keyframes shimmer {
+            0% { background-position: -400px 0; }
+            100% { background-position: 400px 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-800 dark:text-gray-200 min-h-screen">
+
+<!-- ====== TOP HEADER ====== -->
+    <header id="navbar" class="fixed w-full z-50 transition-all duration-300 navbar-scrolled">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-4">
+                <!-- Logo -->
+                <a href="index.html" class="flex items-center gap-3 group" aria-label="Touch+ Services - Accueil">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-400 flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                    <div>
+                        <span class="text-2xl font-black bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">TOUCH+</span>
+                        <span class="hidden sm:block text-[10px] font-bold text-gray-400 uppercase tracking-widest -mt-0.5">Services</span>
+                    </div>
+                </a>
+
+                <!-- Desktop Nav -->
+                <nav class="hidden lg:flex items-center gap-6">
+                    <a href="index.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Accueil</a>
+                    <a href="services.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Services</a>
+                    <a href="realisations.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Réalisations</a>
+                    <a href="blog.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Blog</a>
+                    <a href="about.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">À propos</a>
+                    <a href="contact.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Contact</a>
+                    
+                    <button id="dark-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-700 dark:text-gray-300" aria-label="Basculer le mode sombre">
+                        <svg id="theme-icon-moon" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                        <svg id="theme-icon-sun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 12a5 5 0 100-10 5 5 0 000 10z"/></svg>
+                    </button>
+
+                    <!-- High Visibility Buttons -->
+                    <a href="login.html" class="border-2 border-orange-500 text-orange-500 dark:text-orange-400 font-bold px-4 py-2 rounded-xl hover:bg-orange-50 dark:hover:bg-orange-950/20 text-xs transition-all shadow-sm">
+                        Espace Client
+                    </a>
+                    <a href="register.html" class="bg-orange-500 hover:bg-orange-600 text-white font-black px-4 py-2 rounded-xl text-xs shadow-md transition-all">
+                        Inscription
+                    </a>
+                    <a href="contact.html" class="bg-gradient-to-r from-orange-500 to-yellow-400 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md hover:shadow-orange-300 hover:scale-105 transition-all">
+                        Devis Gratuit →
+                    </a>
+                </nav>
+
+                <!-- Mobile toggle -->
+                <button id="mobile-menu-toggle" class="lg:hidden text-gray-700 dark:text-gray-300 p-2" aria-label="Ouvrir le menu">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile menu -->
+        <div id="mobile-menu" class="mobile-menu lg:hidden">
+            <nav class="flex flex-col gap-4 py-6 px-4">
+                <a href="index.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Accueil</a>
+                <a href="services.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Services</a>
+                <a href="realisations.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Réalisations</a>
+                <a href="blog.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Blog</a>
+                <a href="about.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">À propos</a>
+                <a href="contact.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Contact</a>
+                <hr class="border-gray-200 dark:border-gray-800">
+                <a href="login.html" class="text-orange-500 font-bold py-2">Mon Espace Client</a>
+                <a href="register.html" class="text-orange-500 font-bold py-2">Inscription</a>
+                <a href="contact.html" class="bg-gradient-to-r from-orange-500 to-yellow-400 text-white px-6 py-3 rounded-xl font-bold text-center">Devis Gratuit</a>
+            </nav>
+        </div>
+    </header>
+
+<!-- ====== LAYOUT WRAPPER ====== -->
+<div class="flex pt-16 min-h-screen">
+
+    <!-- ====== SIDEBAR ====== -->
+    <aside id="sidebar" class="w-64 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 flex flex-col p-4 gap-2 min-h-full">
+        <!-- Search -->
+        <div class="search-wrap mb-2">
+            <svg class="w-4 h-4 text-gray-400 z-10 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="search" id="search-orders-input" placeholder="Rechercher..." class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-orange-500 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white">
+        </div>
+
+        <!-- Divider -->
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 mt-2">Suivi Commandes</p>
+
+        <!-- Filter links -->
+        <nav id="sidebar-nav" class="flex flex-col gap-0.5">
+            <a class="sidebar-link active" data-filter="all" onclick="filterOrders('all', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                Tous les projets
+                <span class="count" id="count-all">0</span>
+            </a>
+            <a class="sidebar-link" data-filter="Confirmée" onclick="filterOrders('Confirmée', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                Confirmées
+                <span class="count" id="count-Confirmée">0</span>
+            </a>
+            <a class="sidebar-link" data-filter="Maquette" onclick="filterOrders('Maquette', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                En Maquette
+                <span class="count" id="count-Maquette">0</span>
+            </a>
+            <a class="sidebar-link" data-filter="BAT" onclick="filterOrders('BAT', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                B.A.T Client
+                <span class="count" id="count-BAT">0</span>
+            </a>
+            <a class="sidebar-link" data-filter="Production" onclick="filterOrders('Production', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Production
+                <span class="count" id="count-Production">0</span>
+            </a>
+            <a class="sidebar-link" data-filter="Livraison" onclick="filterOrders('Livraison', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                En Livraison
+                <span class="count" id="count-Livraison">0</span>
+            </a>
+            <a class="sidebar-link" data-filter="Terminée" onclick="filterOrders('Terminée', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Terminées
+                <span class="count" id="count-Terminée">0</span>
+            </a>
+        </nav>
+
+        <!-- Divider -->
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 mt-4">Autres Gestions</p>
+
+        <nav class="flex flex-col gap-0.5">
+            <a class="sidebar-link" id="nav-btn-messages" onclick="switchTab('messages', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+                Messages Contact
+                <span class="count bg-orange-100 text-orange-700" id="count-unread-messages">0</span>
+            </a>
+            <a class="sidebar-link" id="nav-btn-blog" onclick="switchTab('blog', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                Articles du Blog
+            </a>
+            <a class="sidebar-link" id="nav-btn-realisations" onclick="switchTab('realisations', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>
+                Nos Réalisations
+            </a>
+            <a class="sidebar-link" id="nav-btn-equipe" onclick="switchTab('equipe', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                Équipe
+            </a>
+        </nav>
+
+        <div class="flex-1"></div>
+
+        <!-- Refresh -->
+        <button onclick="loadAllOrders()" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 text-orange-600 dark:text-orange-400 text-xs font-bold hover:bg-orange-100 transition border border-orange-100 dark:border-orange-900/30">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Actualiser
+        </button>
+
+        <!-- Go to site -->
+        <a href="index.html" class="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-gray-400 text-xs font-semibold hover:text-orange-500 transition mt-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            Voir le site
+        </a>
+    </aside>
+
+    <!-- Sidebar overlay mobile -->
+    <div id="sidebar-overlay" class="hidden fixed inset-0 z-30 bg-black/40 lg:hidden" onclick="document.getElementById('sidebar').classList.remove('open'); this.classList.add('hidden')"></div>
+
+    <!-- ====== MAIN CONTENT ====== -->
+    <main class="flex-1 p-5 lg:p-8 max-w-full overflow-x-hidden">
+
+        <!-- PAGE TITLE -->
+        <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl lg:text-3xl font-black text-gray-900 dark:text-white">Console d'Administration</h1>
+                <p class="text-sm text-gray-400 mt-1" id="admin-subtitle">Gérez la production, validez les maquettes et suivez les expéditions.</p>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="flex flex-wrap gap-2">
+                <button onclick="openBlogModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-orange-500 text-white shadow-lg hover:shadow-orange-500/30 hover:scale-[1.02] transition">
+                    + Écrire un Article
+                </button>
+                <button onclick="openRealisationModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-gray-900 text-white dark:bg-gray-800 shadow-lg hover:scale-[1.02] transition">
+                    + Nouvelle Réalisation
+                </button>
+            </div>
+        </div>
+
+        <!-- ==================== TAB: ORDERS ==================== -->
+        <div id="tab-orders" class="admin-tab space-y-8">
+            <!-- KPI CARDS -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="kpi-card" style="animation-delay:0s">
+                    <div class="kpi-icon bg-blue-100 dark:bg-blue-950/40">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    </div>
+                    <div>
+                        <div class="kpi-value text-gray-900 dark:text-white" id="kpi-total">—</div>
+                        <div class="kpi-label">Total Projets</div>
+                    </div>
+                </div>
+                <div class="kpi-card" style="animation-delay:0.1s">
+                    <div class="kpi-icon bg-purple-100 dark:bg-purple-950/40">
+                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </div>
+                    <div>
+                        <div class="kpi-value text-purple-600" id="kpi-bat">—</div>
+                        <div class="kpi-label">En attente BAT</div>
+                    </div>
+                </div>
+                <div class="kpi-card" style="animation-delay:0.2s">
+                    <div class="kpi-icon bg-orange-100 dark:bg-orange-950/40">
+                        <svg class="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </div>
+                    <div>
+                        <div class="kpi-value text-orange-500" id="kpi-production">—</div>
+                        <div class="kpi-label">En Production</div>
+                    </div>
+                </div>
+                <div class="kpi-card" style="animation-delay:0.3s">
+                    <div class="kpi-icon bg-green-100 dark:bg-green-950/40">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <div>
+                        <div class="kpi-value text-green-600" id="kpi-done">—</div>
+                        <div class="kpi-label">Terminées</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ORDERS GRID -->
+            <div>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-black text-gray-900 dark:text-white">Liste des Projets</h2>
+                    <span id="results-count" class="text-sm text-gray-400 font-medium"></span>
+                </div>
+
+                <div id="orders-grid" class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div class="col-span-2 py-16 text-center text-gray-400">
+                        <svg class="w-10 h-10 mx-auto mb-3 opacity-40 animate-spin" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Chargement…
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB: MESSAGES ==================== -->
+        <div id="tab-messages" class="admin-tab hidden space-y-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black text-gray-900 dark:text-white">Messages de Contact</h2>
+                <span id="messages-count" class="text-sm bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-bold text-xs">0 non lus</span>
+            </div>
+            
+            <div class="bg-white dark:bg-gray-950 rounded-2xl border border-gray-150 dark:border-gray-800 overflow-hidden shadow-sm">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 dark:bg-gray-900 border-b border-gray-150 dark:border-gray-800 text-gray-400 uppercase text-[10px] font-black tracking-wider">
+                                <th class="p-4">Expéditeur</th>
+                                <th class="p-4">Service</th>
+                                <th class="p-4">Message</th>
+                                <th class="p-4">Date</th>
+                                <th class="p-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="messages-tbody" class="divide-y divide-gray-100 dark:divide-gray-800">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB: BLOG ==================== -->
+        <div id="tab-blog" class="admin-tab hidden space-y-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black text-gray-900 dark:text-white">Gestion du Blog</h2>
+                <button onclick="openBlogModal()" class="px-4 py-2 rounded-xl text-xs font-black bg-orange-500 text-white">
+                    + Nouvel Article
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="blog-list-grid">
+                <!-- Injected by JS -->
+            </div>
+        </div>
+
+        <!-- ==================== TAB: REALISATIONS ==================== -->
+        <div id="tab-realisations" class="admin-tab hidden space-y-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black text-gray-900 dark:text-white">Gestion du Portfolio</h2>
+                <button onclick="openRealisationModal()" class="px-4 py-2 rounded-xl text-xs font-black bg-orange-500 text-white">
+                    + Ajouter une Réalisation
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6" id="realisations-list-grid">
+                <!-- Injected by JS -->
+            </div>
+        </div>
+
+        <!-- ==================== TAB: ÉQUIPE ==================== -->
+        <div id="tab-equipe" class="admin-tab hidden space-y-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black text-gray-900 dark:text-white">Notre Équipe</h2>
+                <button onclick="openTeamModal()" class="px-4 py-2 rounded-xl text-xs font-black bg-orange-500 text-white">
+                    + Ajouter un Membre
+                </button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6" id="team-list-grid">
+                <!-- Injected by JS -->
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ====== MODAL : Upload BAT ====== -->
+<div id="bat-upload-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 modal-overlay hidden">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl max-w-md w-full shadow-2xl mx-4">
+        <h3 class="text-2xl font-black text-gray-900 dark:text-white mb-1">Uploader la Maquette BAT</h3>
+        <p class="text-sm text-gray-400 mb-6">Le statut passera automatiquement en « Validation Client ».</p>
+        <div id="modal-error" class="hidden text-red-600 text-sm font-bold bg-red-50 border border-red-100 p-3 rounded-xl mb-4"></div>
+        <input type="hidden" id="bat-target-order-id">
+        <label class="w-full flex flex-col items-center px-4 py-8 bg-orange-50 dark:bg-orange-950/20 text-orange-500 rounded-2xl border-2 border-dashed border-orange-300 dark:border-orange-800 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/30 transition text-center">
+            <svg class="w-10 h-10 mb-3 opacity-70" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span id="upload-label" class="font-bold text-sm">Glisser / cliquer pour sélectionner</span>
+            <span class="text-xs text-gray-400 mt-1">PNG, JPG, PDF — max 10 Mo</span>
+            <input type="file" id="bat-file-input" accept="image/*,.pdf" class="hidden">
+        </label>
+        <div class="flex gap-3 mt-6">
+            <button onclick="closeBatModal()" class="flex-1 bg-gray-100 dark:bg-gray-700 font-bold py-3 rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition">Annuler</button>
+            <button onclick="submitBATMockup()" class="flex-1 bg-gradient-to-r from-orange-500 to-yellow-400 text-white font-bold py-3 rounded-xl shadow-md hover:shadow-orange-300 transition">Envoyer →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ====== MODAL : Expédition ====== -->
+<div id="shipping-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 modal-overlay hidden">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl max-w-md w-full shadow-2xl mx-4">
+        <h3 class="text-2xl font-black text-gray-900 dark:text-white mb-1">Lancer la Livraison</h3>
+        <p class="text-sm text-gray-400 mb-6">Renseignez les informations d'expédition. Le client recevra les détails dans son espace.</p>
+        <div id="shipping-modal-error" class="hidden text-red-600 text-sm font-bold bg-red-50 border border-red-100 p-3 rounded-xl mb-4"></div>
+        <input type="hidden" id="shipping-target-order-id">
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Transporteur *</label>
+                <input type="text" id="shipping-carrier" value="DHL Côte d'Ivoire" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-orange-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Numéro de Suivi *</label>
+                <input type="text" id="shipping-tracking" placeholder="Ex: DH-84938292-CI" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-orange-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono">
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="closeShippingModal()" class="flex-1 bg-gray-100 dark:bg-gray-700 font-bold py-3 rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition">Annuler</button>
+            <button onclick="submitShippingDetails()" class="flex-1 bg-gradient-to-r from-teal-500 to-cyan-400 text-white font-bold py-3 rounded-xl shadow-md transition">Expédier le Colis →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ====== MODAL : Détail commande ====== -->
+<div id="detail-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 modal-overlay hidden">
+    <div class="bg-white dark:bg-gray-900 rounded-3xl max-w-2xl w-full shadow-2xl mx-4 overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-start">
+            <div>
+                <h3 class="text-xl font-black text-gray-900 dark:text-white" id="detail-title">Détail Commande</h3>
+                <p class="text-xs text-gray-400" id="detail-id"></p>
+            </div>
+            <button onclick="closeDetailModal()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div id="detail-body" class="p-6 overflow-y-auto flex-1 space-y-5"></div>
+    </div>
+</div>
+
+<!-- ====== MODAL : Ajouter / Modifier Article ====== -->
+<div id="blog-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 modal-overlay hidden">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl max-w-lg w-full shadow-2xl mx-4 overflow-y-auto max-h-[90vh]">
+        <h3 class="text-2xl font-black text-gray-900 dark:text-white mb-1" id="blog-modal-title-text">Écrire un Article</h3>
+        <p class="text-sm text-gray-400 mb-6">Publiez des conseils ou actualités visibles sur la page d'accueil.</p>
+        <form id="blog-form" onsubmit="saveArticle(event)" class="space-y-4">
+            <input type="hidden" id="blog-id">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Titre *</label>
+                <input type="text" id="blog-title" required class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Ex: Pourquoi le t-shirt personnalisé cartonne">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Catégorie *</label>
+                    <input type="text" id="blog-category" required class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Ex: Branding, Impression">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Temps de lecture (min) *</label>
+                    <input type="number" id="blog-read-time" required min="1" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="5">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Image de l'article *</label>
+                <div class="flex gap-2">
+                    <input type="text" id="blog-image" required class="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="https://... ou charger un fichier">
+                    <label class="px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs flex items-center justify-center cursor-pointer transition flex-shrink-0">
+                        Importer
+                        <input type="file" accept="image/*" class="hidden" onchange="uploadImageToBase64(this, 'blog-image')">
+                    </label>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Extrait (résumé de l'article) *</label>
+                <textarea id="blog-excerpt" required rows="2" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Court résumé pour la carte du blog..."></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Contenu (HTML autorisé) *</label>
+                <textarea id="blog-content" required rows="4" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="&lt;p&gt;Corps de l'article...&lt;/p&gt;"></textarea>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button type="button" onclick="closeBlogModal()" class="flex-1 bg-gray-100 dark:bg-gray-700 font-bold py-3 rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition">Annuler</button>
+                <button type="submit" class="flex-1 bg-orange-500 text-white font-bold py-3 rounded-xl shadow-md transition">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL : Ajouter / Modifier Réalisation ====== -->
+<div id="realisation-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 modal-overlay hidden">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl max-w-lg w-full shadow-2xl mx-4 overflow-y-auto max-h-[90vh]">
+        <h3 class="text-2xl font-black text-gray-900 dark:text-white mb-1" id="realisation-modal-title-text">Ajouter une Réalisation</h3>
+        <p class="text-sm text-gray-400 mb-6">Ajoutez un projet client marquant au portfolio.</p>
+        <form id="realisation-form" onsubmit="saveRealisation(event)" class="space-y-4">
+            <input type="hidden" id="realisation-id">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Titre du Projet *</label>
+                <input type="text" id="real-title" required class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Ex: Uniformes MTN Côte d'Ivoire">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Catégorie *</label>
+                    <select id="real-category" required class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm">
+                        <option value="textile">Textile</option>
+                        <option value="impression">Impression</option>
+                        <option value="packaging">Packaging</option>
+                        <option value="publicitaire">Publicitaire</option>
+                        <option value="grand-format">Grand Format</option>
+                        <option value="signaletique">Signalétique</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Client *</label>
+                    <input type="text" id="real-client" required class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Ex: MTN CI">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Image de la Réalisation *</label>
+                <div class="flex gap-2">
+                    <input type="text" id="real-image" required class="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="https://... ou charger un fichier">
+                    <label class="px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs flex items-center justify-center cursor-pointer transition flex-shrink-0">
+                        Importer
+                        <input type="file" accept="image/*" class="hidden" onchange="uploadImageToBase64(this, 'real-image')">
+                    </label>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Description *</label>
+                <textarea id="real-description" required rows="3" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Ex: 3 000 t-shirts sérigraphiés pour la force de vente nationale."></textarea>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" id="real-featured" class="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500">
+                <label for="real-featured" class="text-xs font-bold text-gray-600 dark:text-gray-300 uppercase">Mettre en avant sur la page d'accueil</label>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button type="button" onclick="closeRealisationModal()" class="flex-1 bg-gray-100 dark:bg-gray-700 font-bold py-3 rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition">Annuler</button>
+                <button type="submit" class="flex-1 bg-orange-500 text-white font-bold py-3 rounded-xl shadow-md transition">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL : Ajouter / Modifier Membre Équipe ====== -->
+<div id="team-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 modal-overlay hidden">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-3xl max-w-md w-full shadow-2xl mx-4 overflow-y-auto max-h-[90vh]">
+        <h3 class="text-2xl font-black text-gray-900 dark:text-white mb-1" id="team-modal-title">Ajouter un Membre</h3>
+        <p class="text-sm text-gray-400 mb-6">Gérez les membres de votre équipe affichés sur le site.</p>
+        <form id="team-form" onsubmit="saveTeamMember(event)" class="space-y-4">
+            <input type="hidden" id="team-member-id">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Nom complet *</label>
+                <input type="text" id="team-name" required class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Ex: Jean Kouamé">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Poste / Rôle *</label>
+                <input type="text" id="team-role" required class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="Ex: Directeur Général">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Photo du Membre</label>
+                <div class="flex gap-2">
+                    <input type="text" id="team-image" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" placeholder="https://... ou charger une photo">
+                    <label class="px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs flex items-center justify-center cursor-pointer transition flex-shrink-0">
+                        Importer
+                        <input type="file" accept="image/*" class="hidden" onchange="uploadImageToBase64(this, 'team-image')">
+                    </label>
+                </div>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button type="button" onclick="closeTeamModal()" class="flex-1 bg-gray-100 dark:bg-gray-700 font-bold py-3 rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition">Annuler</button>
+                <button type="submit" class="flex-1 bg-orange-500 text-white font-bold py-3 rounded-xl shadow-md transition">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ====== SCRIPTS ====== -->
+<script>
+    // Helper for uploading images as Base64
+    window.uploadImageToBase64 = function(inputEl, targetInputId) {
+        const file = inputEl.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById(targetInputId).value = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    // Auth already verified in <head>, re-get currentUser for use below
+    const currentUser = TouchDb.getCurrentUser();
+
+    document.getElementById('logout-btn').addEventListener('click', () => { TouchDb.logout(); });
+
+    // Mobile sidebar overlay sync
+    document.getElementById('sidebar-toggle').addEventListener('click', () => {
+        document.getElementById('sidebar-overlay').classList.remove('hidden');
+    });
+
+    // ========================
+    // DATA & STATE
+    // ========================
+    let allOrdersList = [];
+    let activeFilter = 'all';
+    let searchQuery = "";
+
+    const productsName = {
+        tshirt: "T-shirt personnalisé", kakemono: "Kakemono vertical",
+        rollup: "Roll-up stand", flyer: "Impression Flyers",
+        packaging: "Packaging carton", autre: "Autre création"
+    };
+
+    const statusConfig = {
+        "Confirmée":  { color: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",   strip: "bg-blue-400",   dot: "bg-blue-400" },
+        "Maquette":   { color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300", strip: "bg-yellow-400", dot: "bg-yellow-400" },
+        "BAT":        { color: "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300", strip: "bg-purple-500", dot: "bg-purple-500" },
+        "Production": { color: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300", strip: "bg-orange-500", dot: "bg-orange-500" },
+        "Livraison":  { color: "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300",   strip: "bg-teal-500",   dot: "bg-teal-500" },
+        "Terminée":   { color: "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300",  strip: "bg-green-500",  dot: "bg-green-500" }
+    };
+
+    // ========================
+    // LOAD
+    // ========================
+    async function loadAllOrders() {
+        const grid = document.getElementById('orders-grid');
+        grid.innerHTML = `<div class="col-span-2 py-16 text-center text-gray-400"><svg class="w-8 h-8 mx-auto mb-3 opacity-40 animate-spin" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>Chargement…</div>`;
+
+        const result = await TouchDb.getAllOrders();
+        if (!result.success) {
+            grid.innerHTML = `<div class="col-span-2 py-12 text-center text-red-500 font-bold">Erreur de chargement.</div>`;
+            return;
+        }
+        allOrdersList = result.orders;
+        updateKPIs();
+        updateCounters();
+        renderOrders();
+    }
+
+    // ========================
+    // GLOBAL UNREAD COUNTER
+    // ========================
+    async function updateGlobalUnreadCounter() {
+        const res = await TouchDb.getMessages();
+        const messages = res.messages || [];
+        const unread = messages.filter(m => !m.read).length;
+        const el = document.getElementById('count-unread-messages');
+        if (el) {
+            el.textContent = unread;
+            el.style.display = unread > 0 ? '' : 'none';
+        }
+        const messagesCountEl = document.getElementById('messages-count');
+        if (messagesCountEl) {
+            messagesCountEl.textContent = unread + " non lu" + (unread !== 1 ? "s" : "");
+        }
+    }
+
+    // ========================
+    // KPIs
+    // ========================
+    function updateKPIs() {
+        document.getElementById('kpi-total').textContent = allOrdersList.length;
+        document.getElementById('kpi-bat').textContent = allOrdersList.filter(o => o.status === 'BAT').length;
+        document.getElementById('kpi-production').textContent = allOrdersList.filter(o => o.status === 'Production' || o.status === 'Livraison').length;
+        document.getElementById('kpi-done').textContent = allOrdersList.filter(o => o.status === 'Terminée').length;
+    }
+
+    // ========================
+    // COUNTERS
+    // ========================
+    function updateCounters() {
+        const statuses = ["Confirmée","Maquette","BAT","Production","Livraison","Terminée"];
+        document.getElementById('count-all').textContent = allOrdersList.length;
+        statuses.forEach(s => {
+            const el = document.getElementById('count-' + s);
+            if (el) el.textContent = allOrdersList.filter(o => o.status === s).length;
+        });
+    }
+
+    // ========================
+    // RENDER ORDERS GRID
+    // ========================
+    function renderOrders() {
+        const grid = document.getElementById('orders-grid');
+        grid.innerHTML = "";
+
+        const filtered = allOrdersList.filter(order => {
+            const matchFilter = activeFilter === 'all' || order.status === activeFilter;
+            const matchSearch = searchQuery === "" ||
+                order.id.toLowerCase().includes(searchQuery) ||
+                order.client_name.toLowerCase().includes(searchQuery) ||
+                order.product.toLowerCase().includes(searchQuery);
+            return matchFilter && matchSearch;
+        });
+
+        document.getElementById('results-count').textContent = filtered.length + " projet" + (filtered.length !== 1 ? "s" : "");
+
+        if (filtered.length === 0) {
+            grid.innerHTML = `<div class="col-span-2 py-16 text-center text-gray-400 font-medium">
+                <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Aucun projet trouvé.
+            </div>`;
+            return;
+        }
+
+        filtered.forEach((order, i) => {
+            const card = buildOrderCard(order, i);
+            grid.appendChild(card);
+        });
+    }
+
+    // ========================
+    // BUILD CARD
+    // ========================
+    function buildOrderCard(order, i) {
+        const card = document.createElement('div');
+        card.className = "order-card";
+        card.style.animationDelay = (i * 0.05) + "s";
+
+        const cfg = statusConfig[order.status] || { color: "bg-gray-100 text-gray-600", strip: "bg-gray-300", dot: "bg-gray-300" };
+        const formattedDate = new Date(order.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+        const productName = productsName[order.product] || order.product;
+
+        // Finition badges
+        const paperMap = { standard: "135g", rigide_250g: "250g Rigide", premium_350g: "350g Premium" };
+        const surfMap = { mate: "Mat", brillante: "Brillant", dorure: "Dorure Or", vernis_selectif: "Vernis 3D" };
+        const cornersMap = { square: "Coins Carrés", rounded: "Coins Arrondis" };
+        let finishBadges = "";
+        if (order.options) {
+            if (order.options.paper) finishBadges += `<span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300">${paperMap[order.options.paper] || ''}</span>`;
+            if (order.options.surface) finishBadges += `<span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300">${surfMap[order.options.surface] || ''}</span>`;
+            if (order.options.corners) finishBadges += `<span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300">${cornersMap[order.options.corners] || ''}</span>`;
+        }
+
+        // Thumbnail
+        let thumbHTML = `<div class="w-11 h-11 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center text-gray-400 flex-shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>`;
+        if (order.options && order.options.preview_image) {
+            thumbHTML = `<img src="${order.options.preview_image}" class="thumb" alt="Aperçu">`;
+        } else if (order.mockup_url) {
+            thumbHTML = `<img src="${order.mockup_url}" class="thumb" alt="BAT">`;
+        }
+
+        // Action button
+        let actionBtn = "";
+        if (order.status === 'Confirmée') {
+            actionBtn = `<button onclick="advanceStatus('${order.id}','Maquette')" class="action-btn bg-yellow-100 text-yellow-700 hover:bg-yellow-200">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                Lancer Maquette</button>`;
+        } else if (order.status === 'Maquette') {
+            actionBtn = `<button onclick="openBatModal('${order.id}')" class="action-btn bg-purple-100 text-purple-700 hover:bg-purple-200">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                Uploader BAT</button>`;
+        } else if (order.status === 'BAT') {
+            actionBtn = `<span class="text-xs text-purple-500 font-semibold italic flex items-center gap-1"><span class="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span> Attente validation client</span>`;
+        } else if (order.status === 'Production') {
+            actionBtn = `<button onclick="openShippingModal('${order.id}')" class="action-btn bg-teal-100 text-teal-700 hover:bg-teal-200">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                Lancer Livraison</button>`;
+        } else if (order.status === 'Livraison') {
+            actionBtn = `<button onclick="advanceStatus('${order.id}','Terminée')" class="action-btn bg-green-100 text-green-700 hover:bg-green-200">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Marquer Livrée</button>`;
+        } else if (order.status === 'Terminée') {
+            actionBtn = `<span class="text-xs text-green-600 font-bold flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Terminé</span>`;
+        }
+
+        // Payment badge + toggle
+        const isPaid = order.payment_status === 'Payé';
+        const payHTML = `<div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-bold ${isPaid ? 'text-green-600' : 'text-red-500'}">${order.payment_status || 'En attente'}</span>
+            <button onclick="togglePaymentStatus('${order.id}', ${isPaid})" class="pay-btn ${isPaid ? 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'}">${isPaid ? '✕ Annuler' : '✓ Valider'}</button>
+        </div>`;
+
+        // Shipping info
+        let shipHTML = "";
+        if (order.shipping_carrier && order.shipping_tracking) {
+            shipHTML = `<div class="flex items-center gap-1.5 text-[10px] text-blue-500 font-semibold">
+                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/></svg>
+                ${order.shipping_carrier} — <span class="font-mono">${order.shipping_tracking}</span>
+            </div>`;
+        }
+
+        // Client comments
+        let commentsHTML = "";
+        if (order.client_comments) {
+            commentsHTML = `<div class="text-[10px] italic text-red-400 mt-0.5 truncate">${order.client_comments}</div>`;
+        }
+
+        // Document links
+        let docHTML = "";
+        if (order.options && order.options.attached_file) {
+            const fn = order.options.attached_file_name || "Fichier";
+            docHTML += `<a href="${order.options.attached_file}" target="_blank" class="text-[10px] text-orange-500 underline font-bold">${fn}</a>`;
+        }
+        if (order.mockup_url) {
+            docHTML += `<a href="${order.mockup_url}" target="_blank" class="text-[10px] text-purple-500 underline font-bold ml-2">BAT.png</a>`;
+        }
+
+        card.innerHTML = `
+            <!-- Status strip -->
+            <div class="status-strip ${cfg.strip}"></div>
+
+            <div class="p-5">
+                <!-- Top Row -->
+                <div class="flex items-start gap-3 mb-4">
+                    ${thumbHTML}
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1 flex-wrap">
+                            <span class="text-xs font-mono font-bold text-gray-400">#${order.id}</span>
+                            <span class="badge ${cfg.color}">
+                                <span class="w-1.5 h-1.5 rounded-full ${cfg.dot} flex-shrink-0"></span>
+                                ${order.status}
+                            </span>
+                        </div>
+                        <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-tight">${productName}</h3>
+                        <p class="text-xs text-gray-400 mt-0.5">${order.quantity} unité${order.quantity > 1 ? 's' : ''} · ${formattedDate}</p>
+                        ${finishBadges ? `<div class="flex flex-wrap gap-1 mt-1.5">${finishBadges}</div>` : ''}
+                    </div>
+                    <!-- Detail button -->
+                    <button onclick="openDetailModal('${order.id}')" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 flex-shrink-0 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                </div>
+
+                <!-- Client info -->
+                <div class="flex items-center justify-between py-3 border-t border-b border-gray-50 dark:border-gray-700/50 mb-4">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-yellow-300 flex items-center justify-center text-white font-black text-xs flex-shrink-0">${order.client_name.charAt(0)}</div>
+                        <div>
+                            <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${order.client_name}</p>
+                            <p class="text-[10px] text-gray-400">${order.client_phone}</p>
+                        </div>
+                    </div>
+                    ${payHTML}
+                </div>
+
+                <!-- Documents -->
+                ${docHTML ? `<div class="mb-3 flex gap-2 flex-wrap">${docHTML}</div>` : ''}
+                ${shipHTML ? `<div class="mb-3">${shipHTML}</div>` : ''}
+                ${commentsHTML}
+
+                <!-- Action -->
+                <div class="flex justify-end pt-3 border-t border-gray-50 dark:border-gray-700/50">
+                    ${actionBtn}
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    // ========================
+    // DETAIL MODAL
+    // ========================
+    window.openDetailModal = function(orderId) {
+        const order = allOrdersList.find(o => o.id === orderId);
+        if (!order) return;
+
+        const cfg = statusConfig[order.status] || { color: "bg-gray-100 text-gray-600", strip: "bg-gray-300" };
+        const productName = productsName[order.product] || order.product;
+        const formattedDate = new Date(order.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        document.getElementById('detail-title').textContent = productName;
+        document.getElementById('detail-id').textContent = "#" + order.id + " — " + formattedDate;
+
+        const steps = ["Confirmée","Maquette","BAT","Production","Livraison","Terminée"];
+        const stepIcons = ["📋","🎨","👁️","⚙️","🚚","✅"];
+        const curStep = steps.indexOf(order.status);
+
+        let timelineHTML = `<div class="flex items-center gap-0">`;
+        steps.forEach((s, i) => {
+            const done = i <= curStep;
+            timelineHTML += `
+                <div class="flex flex-col items-center flex-1">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${done ? 'bg-gradient-to-br from-orange-500 to-yellow-400 text-white shadow-md' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}">${i <= curStep && i < curStep ? '✓' : stepIcons[i]}</div>
+                    <p class="text-[9px] font-bold text-center mt-1 ${done ? 'text-orange-500' : 'text-gray-400'} uppercase leading-tight">${s}</p>
+                </div>
+                ${i < steps.length - 1 ? `<div class="h-0.5 flex-1 mb-4 ${i < curStep ? 'bg-orange-400' : 'bg-gray-200 dark:bg-gray-700'} -mx-1"></div>` : ''}
+            `;
+        });
+        timelineHTML += `</div>`;
+
+        let notesHTML = order.notes ? `<div class="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-sm text-gray-700 dark:text-gray-300">${order.notes}</div>` : `<p class="text-sm text-gray-400 italic">Aucune note.</p>`;
+
+        let mockupSectionHTML = "";
+        if (order.mockup_url) {
+            mockupSectionHTML = `
+                <div>
+                    <p class="text-xs font-bold text-gray-400 uppercase mb-2">Maquette BAT</p>
+                    <a href="${order.mockup_url}" target="_blank" class="block rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-md transition">
+                        <img src="${order.mockup_url}" alt="Maquette BAT" class="w-full object-contain max-h-52">
+                    </a>
+                </div>`;
+        }
+
+        let shipDetailHTML = "";
+        if (order.shipping_carrier || order.shipping_tracking) {
+            shipDetailHTML = `
+                <div class="bg-blue-50 dark:bg-blue-950/20 rounded-xl p-4 border border-blue-100 dark:border-blue-900/30">
+                    <p class="text-xs font-bold text-blue-600 uppercase mb-2">Informations d'Expédition</p>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div><span class="text-gray-400 text-xs">Transporteur</span><p class="font-bold">${order.shipping_carrier || '—'}</p></div>
+                        <div><span class="text-gray-400 text-xs">N° Suivi</span><p class="font-bold font-mono">${order.shipping_tracking || '—'}</p></div>
+                    </div>
+                </div>`;
+        }
+
+        document.getElementById('detail-body').innerHTML = `
+            <!-- Timeline -->
+            <div>
+                <p class="text-xs font-bold text-gray-400 uppercase mb-3">Progression</p>
+                ${timelineHTML}
+            </div>
+
+            <!-- Client -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                    <p class="text-xs font-bold text-gray-400 uppercase mb-2">Client</p>
+                    <p class="font-bold text-sm">${order.client_name}</p>
+                    <p class="text-xs text-gray-400">${order.client_phone}</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                    <p class="text-xs font-bold text-gray-400 uppercase mb-2">Produit</p>
+                    <p class="font-bold text-sm">${productsName[order.product] || order.product}</p>
+                    <p class="text-xs text-gray-400">${order.quantity} unité${order.quantity > 1 ? 's' : ''}</p>
+                </div>
+            </div>
+
+            <!-- Payment -->
+            <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3">
+                <div>
+                    <p class="text-xs font-bold text-gray-400 uppercase">Paiement</p>
+                    <p class="font-bold text-sm ${order.payment_status === 'Payé' ? 'text-green-600' : 'text-red-500'}">${order.payment_status || 'En attente'}</p>
+                </div>
+                <button onclick="togglePaymentStatus('${order.id}', ${order.payment_status === 'Payé'}); closeDetailModal(); setTimeout(loadAllOrders, 300);"
+                    class="action-btn ${order.payment_status === 'Payé' ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}">
+                    ${order.payment_status === 'Payé' ? '✕ Annuler' : '✓ Marquer Payé'}
+                </button>
+            </div>
+
+            <!-- Notes -->
+            <div>
+                <p class="text-xs font-bold text-gray-400 uppercase mb-2">Notes Client</p>
+                ${notesHTML}
+            </div>
+
+            ${mockupSectionHTML}
+            ${shipDetailHTML}
+
+            ${order.client_comments ? `
+            <div class="bg-orange-50 dark:bg-orange-950/20 rounded-xl p-4 border border-orange-100 dark:border-orange-900/30">
+                <p class="text-xs font-bold text-orange-500 uppercase mb-1">Commentaire Client (BAT)</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300 italic">${order.client_comments}</p>
+            </div>` : ''}
+        `;
+
+        document.getElementById('detail-modal').classList.remove('hidden');
+    }
+
+    function closeDetailModal() {
+        document.getElementById('detail-modal').classList.add('hidden');
+    }
+
+    // ========================
+    // ACTIONS
+    // ========================
+    window.advanceStatus = async function(orderId, newStatus) {
+        const result = await TouchDb.updateOrderStatus(orderId, newStatus);
+        if (result.success) { loadAllOrders(); }
+        else { alert("Erreur : " + result.error); }
+    }
+
+    window.togglePaymentStatus = async function(orderId, currentPaidStatus) {
+        const result = await TouchDb.updateOrderPaymentStatus(orderId, !currentPaidStatus);
+        if (result.success) { loadAllOrders(); }
+        else { alert("Erreur : " + result.error); }
+    }
+
+    // ========================
+    // TABS SWITCHING
+    // ========================
+    window.switchTab = function(tabId, el) {
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.add('hidden'));
+        document.getElementById('tab-' + tabId).classList.remove('hidden');
+        
+        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+        if (el) el.classList.add('active');
+        
+        const subtitle = document.getElementById('admin-subtitle');
+        if (tabId === 'messages') {
+            subtitle.textContent = "Consultez et répondez aux messages de demande de devis.";
+            loadMessages();
+        } else if (tabId === 'blog') {
+            subtitle.textContent = "Gérez les articles de conseils et d'actualités.";
+            loadBlogArticles();
+        } else if (tabId === 'realisations') {
+            subtitle.textContent = "Gérez les réalisations affichées dans le portfolio.";
+            loadRealisationsList();
+        } else if (tabId === 'equipe') {
+            subtitle.textContent = "Gérez les membres de votre équipe affichés sur le site.";
+            loadTeamList();
+        }
+    };
+
+    // ========================
+    // FILTER + SEARCH (ORDERS)
+    // ========================
+    window.filterOrders = function(status, el) {
+        activeFilter = status;
+        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+        if (el) el.classList.add('active');
+        
+        // Ensure orders tab is shown
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.add('hidden'));
+        document.getElementById('tab-orders').classList.remove('hidden');
+        document.getElementById('admin-subtitle').textContent = "Gérez la production, validez les maquettes et suivez les expéditions.";
+        
+        renderOrders();
+    };
+
+    document.getElementById('search-orders-input').addEventListener('input', function(e) {
+        searchQuery = e.target.value.toLowerCase().trim();
+        // Ensure orders tab is active when searching
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.add('hidden'));
+        document.getElementById('tab-orders').classList.remove('hidden');
+        renderOrders();
+    });
+
+    // ========================
+    // MANAGEMENT: MESSAGES
+    // ========================
+    async function loadMessages() {
+        const tbody = document.getElementById('messages-tbody');
+        tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-400">Chargement...</td></tr>`;
+        
+        const res = await TouchDb.getMessages();
+        const messages = res.messages || [];
+        
+        const unreadCount = messages.filter(m => !m.read).length;
+        document.getElementById('messages-count').textContent = unreadCount + " non lu" + (unreadCount !== 1 ? "s" : "");
+        document.getElementById('count-unread-messages').textContent = unreadCount;
+        
+        if (messages.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-400">Aucun message de contact reçu.</td></tr>`;
+            return;
+        }
+        
+        tbody.innerHTML = messages.map(m => `
+            <tr class="${m.read ? 'opacity-70' : 'font-bold bg-orange-500/[0.03] dark:bg-orange-500/[0.01]'}">
+                <td class="p-4 border-b border-gray-100 dark:border-gray-800">
+                    <p class="text-gray-900 dark:text-white font-bold text-sm">${m.name}</p>
+                    <p class="text-xs text-gray-400 mt-0.5">${m.email} · ${m.phone}</p>
+                </td>
+                <td class="p-4 border-b border-gray-100 dark:border-gray-800">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">${m.service}</span>
+                </td>
+                <td class="p-4 border-b border-gray-100 dark:border-gray-800 max-w-xs truncate" title="${m.message}">${m.message}</td>
+                <td class="p-4 border-b border-gray-100 dark:border-gray-800 text-xs text-gray-400">${new Date(m.date).toLocaleDateString('fr-FR', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+                <td class="p-4 border-b border-gray-100 dark:border-gray-800 text-right space-x-2 whitespace-nowrap">
+                    ${!m.read ? `<button onclick="markMessageRead('${m.id}')" class="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 rounded-lg hover:opacity-80 transition">Lu</button>` : ''}
+                    <a href="mailto:${m.email}?subject=TOUCH%2B%20Services%20-%20Votre%20demande" onclick="markMessageReplied('${m.id}')" class="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 rounded-lg hover:opacity-80 transition inline-block">Répondre</a>
+                    <button onclick="deleteMessage('${m.id}')" class="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider bg-red-150 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded-lg hover:opacity-80 transition">Suppr</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    window.markMessageRead = async function(id) {
+        await TouchDb.markMessageRead(id);
+        loadMessages();
+    };
+
+    window.markMessageReplied = async function(id) {
+        await TouchDb.markMessageReplied(id);
+        loadMessages();
+    };
+
+    window.deleteMessage = async function(id) {
+        if (confirm("Supprimer définitivement ce message ?")) {
+            await TouchDb.deleteMessage(id);
+            loadMessages();
+        }
+    };
+
+    // ========================
+    // MANAGEMENT: BLOG
+    // ========================
+    async function loadBlogArticles() {
+        const grid = document.getElementById('blog-list-grid');
+        grid.innerHTML = `<div class="col-span-full py-12 text-center text-gray-400">Chargement des articles...</div>`;
+        
+        const res = await TouchDb.getArticles(false);
+        const articles = res.articles || [];
+        
+        if (articles.length === 0) {
+            grid.innerHTML = `<div class="col-span-full py-12 text-center text-gray-400 font-medium">Aucun article dans le blog pour le moment.</div>`;
+            return;
+        }
+        
+        grid.innerHTML = articles.map(a => `
+            <div class="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden border border-gray-150 dark:border-gray-800 shadow-sm flex flex-col justify-between">
+                <div class="relative h-40">
+                    <img src="${a.image}" alt="${a.title}" class="w-full h-full object-cover">
+                    <span class="absolute top-3 left-3 bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase">${a.category}</span>
+                </div>
+                <div class="p-4 flex-1 flex flex-col justify-between">
+                    <div>
+                        <h4 class="font-black text-sm text-gray-900 dark:text-white mb-1 leading-tight">${a.title}</h4>
+                        <p class="text-[10px] text-gray-400 mb-2">${new Date(a.date).toLocaleDateString('fr-FR')} · LECTURE ${a.read_time} MIN</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">${a.excerpt}</p>
+                    </div>
+                    <div class="flex gap-2 justify-end pt-3 mt-4 border-t border-gray-100 dark:border-gray-800">
+                        <button onclick="editArticle('${a.id}')" class="px-2.5 py-1 text-[10px] font-bold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded hover:opacity-80 transition">Modifier</button>
+                        <button onclick="deleteArticle('${a.id}')" class="px-2.5 py-1 text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded hover:opacity-80 transition">Supprimer</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.openBlogModal = function() {
+        document.getElementById('blog-form').reset();
+        document.getElementById('blog-id').value = "";
+        document.getElementById('blog-modal-title-text').textContent = "Écrire un Article";
+        document.getElementById('blog-modal').classList.remove('hidden');
+    };
+
+    window.closeBlogModal = function() {
+        document.getElementById('blog-modal').classList.add('hidden');
+    };
+
+    window.saveArticle = async function(e) {
+        e.preventDefault();
+        const id = document.getElementById('blog-id').value;
+        const title = document.getElementById('blog-title').value.trim();
+        const category = document.getElementById('blog-category').value.trim();
+        const readTime = parseInt(document.getElementById('blog-read-time').value) || 5;
+        const image = document.getElementById('blog-image').value.trim();
+        const excerpt = document.getElementById('blog-excerpt').value.trim();
+        const content = document.getElementById('blog-content').value.trim();
+        
+        const data = { title, category, read_time: readTime, image, excerpt, content, author: "Équipe Touch+" };
+        
+        if (id) {
+            const articles = JSON.parse(localStorage.getItem('touchplus_articles') || '[]');
+            const idx = articles.findIndex(a => a.id === id);
+            if (idx !== -1) {
+                articles[idx] = { ...articles[idx], ...data };
+                localStorage.setItem('touchplus_articles', JSON.stringify(articles));
+            }
+        } else {
+            await TouchDb.addArticle(data);
+        }
+        
+        closeBlogModal();
+        loadBlogArticles();
+    };
+
+    window.editArticle = function(id) {
+        const articles = JSON.parse(localStorage.getItem('touchplus_articles') || '[]');
+        const a = articles.find(x => x.id === id);
+        if (!a) return;
+        
+        document.getElementById('blog-id').value = a.id;
+        document.getElementById('blog-title').value = a.title;
+        document.getElementById('blog-category').value = a.category;
+        document.getElementById('blog-read-time').value = a.read_time;
+        document.getElementById('blog-image').value = a.image;
+        document.getElementById('blog-excerpt').value = a.excerpt;
+        document.getElementById('blog-content').value = a.content;
+        
+        document.getElementById('blog-modal-title-text').textContent = "Modifier l'Article";
+        document.getElementById('blog-modal').classList.remove('hidden');
+    };
+
+    window.deleteArticle = async function(id) {
+        if (confirm("Supprimer définitivement cet article ?")) {
+            await TouchDb.deleteArticle(id);
+            loadBlogArticles();
+        }
+    };
+
+    // ========================
+    // MANAGEMENT: PORTFOLIO
+    // ========================
+    async function loadRealisationsList() {
+        const grid = document.getElementById('realisations-list-grid');
+        grid.innerHTML = `<div class="col-span-full py-12 text-center text-gray-400">Chargement du portfolio...</div>`;
+        
+        const res = await TouchDb.getRealisations('all');
+        const items = res.items || [];
+        
+        if (items.length === 0) {
+            grid.innerHTML = `<div class="col-span-full py-12 text-center text-gray-400 font-medium">Aucune réalisation dans le portfolio.</div>`;
+            return;
+        }
+        
+        grid.innerHTML = items.map(r => `
+            <div class="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden border border-gray-150 dark:border-gray-800 shadow-sm flex flex-col justify-between">
+                <div class="relative h-28">
+                    <img src="${r.image}" alt="${r.title}" class="w-full h-full object-cover">
+                    ${r.featured ? '<span class="absolute top-2 right-2 bg-orange-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">★ Featured</span>' : ''}
+                </div>
+                <div class="p-3 flex-1 flex flex-col justify-between">
+                    <div>
+                        <span class="text-[9px] font-black uppercase text-gray-400 tracking-wider">${r.category}</span>
+                        <h4 class="font-black text-xs text-gray-900 dark:text-white leading-tight mt-0.5 line-clamp-1" title="${r.title}">${r.title}</h4>
+                        <p class="text-[10px] text-gray-400 leading-tight mt-0.5">${r.client}</p>
+                    </div>
+                    <div class="flex gap-1.5 justify-end pt-2 mt-2 border-t border-gray-100 dark:border-gray-800">
+                        <button onclick="editRealisation('${r.id}')" class="px-2 py-0.5 text-[9px] font-bold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded">Modif</button>
+                        <button onclick="deleteRealisation('${r.id}')" class="px-2 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded">Suppr</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.openRealisationModal = function() {
+        document.getElementById('realisation-form').reset();
+        document.getElementById('realisation-id').value = "";
+        document.getElementById('real-featured').checked = false;
+        document.getElementById('realisation-modal-title-text').textContent = "Ajouter une Réalisation";
+        document.getElementById('realisation-modal').classList.remove('hidden');
+    };
+
+    window.closeRealisationModal = function() {
+        document.getElementById('realisation-modal').classList.add('hidden');
+    };
+
+    window.saveRealisation = async function(e) {
+        e.preventDefault();
+        const id = document.getElementById('realisation-id').value;
+        const title = document.getElementById('real-title').value.trim();
+        const category = document.getElementById('real-category').value;
+        const client = document.getElementById('real-client').value.trim();
+        const image = document.getElementById('real-image').value.trim();
+        const description = document.getElementById('real-description').value.trim();
+        const featured = document.getElementById('real-featured').checked;
+        
+        const data = { title, category, client, image, description, featured };
+        
+        if (id) {
+            const reals = JSON.parse(localStorage.getItem('touchplus_realisations') || '[]');
+            const idx = reals.findIndex(r => r.id === id);
+            if (idx !== -1) {
+                reals[idx] = { ...reals[idx], ...data };
+                localStorage.setItem('touchplus_realisations', JSON.stringify(reals));
+            }
+        } else {
+            await TouchDb.addRealisation(data);
+        }
+        
+        closeRealisationModal();
+        loadRealisationsList();
+    };
+
+    window.editRealisation = function(id) {
+        const reals = JSON.parse(localStorage.getItem('touchplus_realisations') || '[]');
+        const r = reals.find(x => x.id === id);
+        if (!r) return;
+        
+        document.getElementById('realisation-id').value = r.id;
+        document.getElementById('real-title').value = r.title;
+        document.getElementById('real-category').value = r.category;
+        document.getElementById('real-client').value = r.client;
+        document.getElementById('real-image').value = r.image;
+        document.getElementById('real-description').value = r.description;
+        document.getElementById('real-featured').checked = !!r.featured;
+        
+        document.getElementById('realisation-modal-title-text').textContent = "Modifier la Réalisation";
+        document.getElementById('realisation-modal').classList.remove('hidden');
+    };
+
+    window.deleteRealisation = async function(id) {
+        if (confirm("Supprimer cette réalisation ?")) {
+            await TouchDb.deleteRealisation(id);
+            loadRealisationsList();
+        }
+    };
+
+    // ========================
+    // BAT MODAL
+    // ========================
+    let selectedFileBase64 = "", selectedFileName = "";
+ 
+    window.openBatModal = function(orderId) {
+        document.getElementById('bat-target-order-id').value = orderId;
+        document.getElementById('bat-upload-modal').classList.remove('hidden');
+    }
+ 
+    window.closeBatModal = function() {
+        document.getElementById('bat-upload-modal').classList.add('hidden');
+        document.getElementById('bat-file-input').value = "";
+        document.getElementById('upload-label').textContent = "Glisser / cliquer pour sélectionner";
+        selectedFileBase64 = ""; selectedFileName = "";
+        document.getElementById('modal-error').classList.add('hidden');
+    }
+ 
+    document.getElementById('bat-file-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        selectedFileName = file.name;
+        document.getElementById('upload-label').textContent = "✓ " + file.name;
+        const reader = new FileReader();
+        reader.onload = evt => { selectedFileBase64 = evt.target.result; };
+        reader.readAsDataURL(file);
+    });
+ 
+    window.submitBATMockup = async function() {
+        const orderId = document.getElementById('bat-target-order-id').value;
+        const errEl = document.getElementById('modal-error');
+        errEl.classList.add('hidden');
+        if (!selectedFileBase64) {
+            errEl.textContent = "Veuillez sélectionner un fichier.";
+            errEl.classList.remove('hidden'); return;
+        }
+        const result = await TouchDb.uploadMockupBAT(orderId, { base64: selectedFileBase64, name: selectedFileName });
+        if (result.success) { closeBatModal(); loadAllOrders(); }
+        else { errEl.textContent = "Erreur : " + result.error; errEl.classList.remove('hidden'); }
+    }
+ 
+    // ========================
+    // SHIPPING MODAL
+    // ========================
+    window.openShippingModal = function(orderId) {
+        document.getElementById('shipping-target-order-id').value = orderId;
+        document.getElementById('shipping-modal-error').classList.add('hidden');
+        document.getElementById('shipping-carrier').value = "DHL Côte d'Ivoire";
+        document.getElementById('shipping-tracking').value = "";
+        document.getElementById('shipping-modal').classList.remove('hidden');
+    }
+ 
+    window.closeShippingModal = function() {
+        document.getElementById('shipping-modal').classList.add('hidden');
+    }
+ 
+    window.submitShippingDetails = async function() {
+        const orderId = document.getElementById('shipping-target-order-id').value;
+        const carrier = document.getElementById('shipping-carrier').value.trim();
+        const tracking = document.getElementById('shipping-tracking').value.trim();
+        const errEl = document.getElementById('shipping-modal-error');
+        if (!carrier || !tracking) {
+            errEl.textContent = "Transporteur et numéro de suivi requis.";
+            errEl.classList.remove('hidden'); return;
+        }
+        const result = await TouchDb.updateOrderShipping(orderId, carrier, tracking);
+        if (result.success) { closeShippingModal(); loadAllOrders(); }
+        else { errEl.textContent = "Erreur : " + result.error; errEl.classList.remove('hidden'); }
+    }
+ 
+    // ========================
+    // TEAM MANAGEMENT
+    // ========================
+    let teamEditId = null;
+    const DEFAULT_TEAM = [
+        { id: 'tm-001', name: 'Jean Kouamé', role: 'Directeur Général', image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop' },
+        { id: 'tm-002', name: 'Aïssata Diop', role: 'Responsable Commerciale', image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&h=200&fit=crop' },
+        { id: 'tm-003', name: 'Moussa Traoré', role: "Chef d'Atelier", image: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&h=200&fit=crop' },
+        { id: 'tm-004', name: 'Fatou Bamba', role: 'Designer Graphique', image: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&h=200&fit=crop' }
+    ];
+
+    function getTeamMembers() {
+        const raw = localStorage.getItem('touchplus_team');
+        return raw ? JSON.parse(raw) : DEFAULT_TEAM;
+    }
+
+    function saveTeamToStorage(members) {
+        localStorage.setItem('touchplus_team', JSON.stringify(members));
+    }
+
+    function loadTeamList() {
+        const grid = document.getElementById('team-list-grid');
+        if (!grid) return;
+        const members = getTeamMembers();
+        if (!members.length) {
+            grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-400">Aucun membre dans l\'équipe.</div>';
+            return;
+        }
+        grid.innerHTML = members.map(m => `
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-100 dark:border-gray-700 p-5 text-center group hover:shadow-lg transition">
+                <div class="w-20 h-20 mx-auto rounded-full overflow-hidden mb-3 border-4 border-white dark:border-gray-700 shadow-md group-hover:border-orange-400 transition">
+                    <img src="${m.image || 'https://via.placeholder.com/80'}" alt="${m.name}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/80'">
+                </div>
+                <h4 class="font-black text-sm text-gray-900 dark:text-white">${m.name}</h4>
+                <p class="text-xs text-orange-500 font-bold uppercase mt-0.5 mb-3">${m.role}</p>
+                <div class="flex gap-2 justify-center">
+                    <button onclick="editTeamMember('${m.id}')" class="action-btn bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 text-xs">✏️ Modifier</button>
+                    <button onclick="deleteTeamMember('${m.id}')" class="action-btn bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 hover:bg-red-100 text-xs">🗑</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.openTeamModal = function() {
+        teamEditId = null;
+        document.getElementById('team-modal-title').textContent = 'Ajouter un Membre';
+        document.getElementById('team-form').reset();
+        document.getElementById('team-member-id').value = '';
+        document.getElementById('team-modal').classList.remove('hidden');
+    };
+
+    window.closeTeamModal = function() {
+        document.getElementById('team-modal').classList.add('hidden');
+    };
+
+    window.editTeamMember = function(id) {
+        const members = getTeamMembers();
+        const m = members.find(x => x.id === id);
+        if (!m) return;
+        teamEditId = id;
+        document.getElementById('team-modal-title').textContent = 'Modifier le Membre';
+        document.getElementById('team-member-id').value = id;
+        document.getElementById('team-name').value = m.name;
+        document.getElementById('team-role').value = m.role;
+        document.getElementById('team-image').value = m.image || '';
+        document.getElementById('team-modal').classList.remove('hidden');
+    };
+
+    window.deleteTeamMember = function(id) {
+        if (!confirm('Supprimer ce membre ?')) return;
+        let members = getTeamMembers().filter(m => m.id !== id);
+        saveTeamToStorage(members);
+        loadTeamList();
+    };
+
+    window.saveTeamMember = function(e) {
+        e.preventDefault();
+        const members = getTeamMembers();
+        const id = document.getElementById('team-member-id').value || ('tm-' + Date.now());
+        const entry = {
+            id,
+            name: document.getElementById('team-name').value.trim(),
+            role: document.getElementById('team-role').value.trim(),
+            image: document.getElementById('team-image').value.trim()
+        };
+        const idx = members.findIndex(m => m.id === id);
+        if (idx >= 0) members[idx] = entry;
+        else members.push(entry);
+        saveTeamToStorage(members);
+        closeTeamModal();
+        loadTeamList();
+    };
+
+    // Close modals on overlay click
+    ['bat-upload-modal', 'shipping-modal', 'detail-modal', 'blog-modal', 'realisation-modal', 'team-modal'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.add('hidden');
+                    if (id === 'bat-upload-modal') closeBatModal();
+                    if (id === 'shipping-modal') closeShippingModal();
+                    if (id === 'blog-modal') closeBlogModal();
+                    if (id === 'realisation-modal') closeRealisationModal();
+                }
+            });
+        }
+    });
+ 
+    // ========================
+    // INIT
+    // ========================
+    loadAllOrders();
+    updateGlobalUnreadCounter();
+</script>
+</body>
+</html>

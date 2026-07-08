@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <script src="config.js"></script>
+    <script src="db.js"></script>
+    <script>
+        (function() {
+            const currentUser = TouchDb.getCurrentUser();
+            if (!currentUser) {
+                window.location.replace("login.html");
+            } else if (currentUser.role === 'admin') {
+                window.location.replace("dashboard-admin.html");
+            }
+        })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Espace – Touch+ Services</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.45s ease-out forwards',
+                        'pulse-dot': 'pulseDot 2s infinite',
+                        'slide-in': 'slideIn 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        fadeInUp: { '0%': { opacity: 0, transform: 'translateY(20px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        pulseDot: { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.5, transform: 'scale(1.4)' } },
+                        slideIn: { '0%': { opacity: 0, transform: 'translateX(20px)' }, '100%': { opacity: 1, transform: 'translateX(0)' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
+        .dark ::-webkit-scrollbar-thumb { background: #374151; }
+
+        /* Product grid cards */
+        .product-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 1rem;
+            padding: 1rem 0.75rem;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+            background: white;
+            display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+        }
+        .product-card:hover { border-color: #f97316; background: #fff7ed; color: #c2410c; }
+        .product-card.selected { border-color: #f97316; background: linear-gradient(135deg, #fff7ed, #fef3c7); box-shadow: 0 0 0 3px rgba(249,115,22,0.15); }
+        .dark .product-card { background: #1f2937; border-color: #374151; color: #d1d5db; }
+        .dark .product-card:hover { border-color: #f97316; background: #431407; color: #fb923c; }
+        .dark .product-card.selected { border-color: #f97316; background: #431407; }
+
+        /* Order card */
+        .order-card {
+            background: white;
+            border-radius: 1.5rem;
+            border: 1px solid #f3f4f6;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+            overflow: hidden;
+            animation: fadeInUp 0.4s ease-out forwards;
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+        .order-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.09); transform: translateY(-2px); }
+        .dark .order-card { background: #1f2937; border-color: #374151; }
+
+        /* Timeline */
+        .step-dot {
+            width: 2rem; height: 2rem; border-radius: 9999px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 800;
+            position: relative; z-index: 1; flex-shrink: 0;
+            transition: all 0.3s;
+        }
+        .step-dot.done { background: linear-gradient(135deg, #f97316, #fbbf24); color: white; box-shadow: 0 2px 8px rgba(249,115,22,0.35); }
+        .step-dot.current { background: linear-gradient(135deg, #f97316, #fbbf24); color: white; box-shadow: 0 0 0 4px rgba(249,115,22,0.2); animation: pulseDot 2s infinite; }
+        .step-dot.pending { background: #f3f4f6; color: #9ca3af; }
+        .dark .step-dot.pending { background: #374151; color: #6b7280; }
+
+        .step-line {
+            flex: 1; height: 3px; border-radius: 2px;
+            background: #e5e7eb;
+            transition: background 0.4s;
+        }
+        .step-line.done { background: linear-gradient(to right, #f97316, #fbbf24); }
+        .dark .step-line { background: #374151; }
+
+        /* File drop zone */
+        .drop-zone {
+            border: 2px dashed #d1d5db;
+            border-radius: 1rem;
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .drop-zone:hover, .drop-zone.drag-over { border-color: #f97316; background: #fff7ed; }
+        .dark .drop-zone { border-color: #374151; }
+        .dark .drop-zone:hover { border-color: #f97316; background: #431407; }
+
+        /* Status badge */
+        .status-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.75rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+
+        /* Accordion */
+        .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .accordion-content.open { max-height: 400px; }
+
+        /* Qty spinner */
+        .qty-btn { width: 2rem; height: 2rem; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; cursor: pointer; background: #f3f4f6; color: #374151; transition: all 0.15s; border: none; }
+        .qty-btn:hover { background: #f97316; color: white; }
+        .dark .qty-btn { background: #374151; color: #d1d5db; }
+
+        /* Copy button */
+        .copy-btn { font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 0.375rem; cursor: pointer; background: #e0f2fe; color: #0369a1; border: none; transition: all 0.15s; }
+        .copy-btn:hover { background: #0369a1; color: white; }
+
+        @media print {
+            body * { visibility: hidden; }
+            #invoice-print-area, #invoice-print-area * { visibility: visible; }
+            #invoice-print-area { position: absolute; left: 0; top: 0; width: 100%; border: none; box-shadow: none; }
+            #invoice-modal { position: absolute; left: 0; top: 0; width: 100%; height: auto; background: white !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-800 dark:text-gray-200 min-h-screen">
+
+<!-- ====== TOP HEADER ====== -->
+    <header id="navbar" class="fixed w-full z-50 transition-all duration-300 navbar-scrolled">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-4">
+                <!-- Logo -->
+                <a href="index.html" class="flex items-center gap-3 group" aria-label="Touch+ Services - Accueil">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-400 flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                    <div>
+                        <span class="text-2xl font-black bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">TOUCH+</span>
+                        <span class="hidden sm:block text-[10px] font-bold text-gray-400 uppercase tracking-widest -mt-0.5">Services</span>
+                    </div>
+                </a>
+
+                <!-- Desktop Nav -->
+                <nav class="hidden lg:flex items-center gap-6">
+                    <a href="index.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Accueil</a>
+                    <a href="services.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Services</a>
+                    <a href="realisations.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Réalisations</a>
+                    <a href="blog.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Blog</a>
+                    <a href="about.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">À propos</a>
+                    <a href="contact.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 font-semibold text-sm transition-colors">Contact</a>
+                    
+                    <button id="dark-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-700 dark:text-gray-300" aria-label="Basculer le mode sombre">
+                        <svg id="theme-icon-moon" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                        <svg id="theme-icon-sun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 12a5 5 0 100-10 5 5 0 000 10z"/></svg>
+                    </button>
+
+                    <!-- High Visibility Buttons -->
+                    <a href="login.html" class="border-2 border-orange-500 text-orange-500 dark:text-orange-400 font-bold px-4 py-2 rounded-xl hover:bg-orange-50 dark:hover:bg-orange-950/20 text-xs transition-all shadow-sm">
+                        Espace Client
+                    </a>
+                    <a href="register.html" class="bg-orange-500 hover:bg-orange-600 text-white font-black px-4 py-2 rounded-xl text-xs shadow-md transition-all">
+                        Inscription
+                    </a>
+                    <a href="contact.html" class="bg-gradient-to-r from-orange-500 to-yellow-400 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md hover:shadow-orange-300 hover:scale-105 transition-all">
+                        Devis Gratuit →
+                    </a>
+                </nav>
+
+                <!-- Mobile toggle -->
+                <button id="mobile-menu-toggle" class="lg:hidden text-gray-700 dark:text-gray-300 p-2" aria-label="Ouvrir le menu">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile menu -->
+        <div id="mobile-menu" class="mobile-menu lg:hidden">
+            <nav class="flex flex-col gap-4 py-6 px-4">
+                <a href="index.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Accueil</a>
+                <a href="services.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Services</a>
+                <a href="realisations.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Réalisations</a>
+                <a href="blog.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Blog</a>
+                <a href="about.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">À propos</a>
+                <a href="contact.html" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 font-semibold py-2">Contact</a>
+                <hr class="border-gray-200 dark:border-gray-800">
+                <a href="login.html" class="text-orange-500 font-bold py-2">Mon Espace Client</a>
+                <a href="register.html" class="text-orange-500 font-bold py-2">Inscription</a>
+                <a href="contact.html" class="bg-gradient-to-r from-orange-500 to-yellow-400 text-white px-6 py-3 rounded-xl font-bold text-center">Devis Gratuit</a>
+            </nav>
+        </div>
+    </header>
+
+<!-- ====== MAIN ====== -->
+<main class="pt-16">
+
+    <!-- ====== HERO BANNER ====== -->
+    <div class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white relative overflow-hidden">
+        <!-- Decorative elements -->
+        <div class="absolute top-0 right-0 w-96 h-96 bg-orange-500/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl"></div>
+        <div class="absolute bottom-0 left-1/4 w-64 h-64 bg-yellow-500/10 rounded-full translate-y-1/2 blur-2xl"></div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-10 relative">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                <!-- Welcome -->
+                <div class="flex items-center gap-4">
+                    <div id="hero-avatar" class="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-yellow-400 flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-orange-500/20 flex-shrink-0">?</div>
+                    <div>
+                        <p class="text-xs font-bold text-orange-400 uppercase tracking-widest mb-0.5">Bienvenue,</p>
+                        <h1 class="text-2xl sm:text-3xl font-black" id="client-name">...</h1>
+                        <p class="text-gray-400 text-xs mt-0.5" id="client-email">...</p>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="flex gap-3 flex-wrap">
+                    <div class="bg-white/10 backdrop-blur-sm border border-white/10 rounded-2xl px-5 py-3 text-center min-w-[90px]">
+                        <div class="text-2xl font-black text-orange-400" id="stat-active">—</div>
+                        <div class="text-[10px] font-bold text-gray-400 uppercase mt-0.5">En cours</div>
+                    </div>
+                    <div class="bg-white/10 backdrop-blur-sm border border-white/10 rounded-2xl px-5 py-3 text-center min-w-[90px]">
+                        <div class="text-2xl font-black text-green-400" id="stat-done">—</div>
+                        <div class="text-[10px] font-bold text-gray-400 uppercase mt-0.5">Terminées</div>
+                    </div>
+                    <div class="bg-white/10 backdrop-blur-sm border border-white/10 rounded-2xl px-5 py-3 text-center min-w-[90px]">
+                        <div class="text-2xl font-black text-purple-400" id="stat-bat">—</div>
+                        <div class="text-[10px] font-bold text-gray-400 uppercase mt-0.5">À valider</div>
+                    </div>
+                </div>
+
+                <!-- CTA -->
+                <button onclick="scrollToOrder()" class="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-yellow-400 text-white font-bold px-6 py-3 rounded-2xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105 transition text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+                    Nouvelle Commande
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== CONTENT GRID ====== -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div class="grid lg:grid-cols-12 gap-8">
+
+            <!-- ====== LEFT COL : Orders ====== -->
+            <div class="lg:col-span-7 xl:col-span-8 space-y-5">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        Mes Commandes
+                    </h2>
+                    <button onclick="loadOrders()" class="text-xs font-bold text-orange-500 hover:text-orange-600 flex items-center gap-1 bg-orange-50 dark:bg-orange-950/20 px-3 py-1.5 rounded-lg border border-orange-100 dark:border-orange-900/30 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Actualiser
+                    </button>
+                </div>
+
+                <div id="orders-container" class="space-y-4">
+                    <!-- Cards injected -->
+                    <div class="py-16 text-center text-gray-400 bg-white dark:bg-gray-800 rounded-3xl">
+                        <svg class="w-8 h-8 mx-auto mb-3 opacity-40 animate-spin" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Chargement…
+                    </div>
+                </div>
+            </div>
+
+            <!-- ====== RIGHT COL : Order Form + Help ====== -->
+            <div class="lg:col-span-5 xl:col-span-4 space-y-6">
+
+                <!-- ====== ORDER FORM ====== -->
+                <div id="order-section" class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+                    <!-- Card header -->
+                    <div class="bg-gradient-to-r from-orange-500 to-yellow-400 p-5">
+                        <h3 class="text-white font-black text-lg">Nouvelle Commande</h3>
+                        <p class="text-orange-100 text-xs mt-0.5">Configurez votre produit en quelques clics</p>
+                    </div>
+
+                    <div class="p-5 space-y-5">
+                        <!-- Alerts -->
+                        <div id="order-error" class="hidden text-red-600 text-sm font-bold bg-red-50 border border-red-100 p-3 rounded-xl"></div>
+                        <div id="order-success" class="hidden text-green-700 text-sm font-bold bg-green-50 border border-green-100 p-3 rounded-xl flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Commande envoyée avec succès !
+                        </div>
+
+                        <form id="quick-order-form" novalidate>
+
+                        <!-- STEP 1 : Product selection -->
+                        <div class="space-y-2">
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider">1. Choisir le produit</label>
+                            <input type="hidden" id="product-type" value="tshirt">
+                            <div class="grid grid-cols-3 gap-2">
+                                <div class="product-card selected" onclick="selectProduct('tshirt', this)" data-val="tshirt">
+                                    <span class="text-2xl">👕</span>
+                                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300 leading-tight">T-shirt</span>
+                                </div>
+                                <div class="product-card" onclick="selectProduct('kakemono', this)" data-val="kakemono">
+                                    <span class="text-2xl">📸</span>
+                                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300 leading-tight">Kakemono</span>
+                                </div>
+                                <div class="product-card" onclick="selectProduct('rollup', this)" data-val="rollup">
+                                    <span class="text-2xl">🖼️</span>
+                                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300 leading-tight">Roll-up</span>
+                                </div>
+                                <div class="product-card" onclick="selectProduct('flyer', this)" data-val="flyer">
+                                    <span class="text-2xl">📄</span>
+                                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300 leading-tight">Flyers</span>
+                                </div>
+                                <div class="product-card" onclick="selectProduct('packaging', this)" data-val="packaging">
+                                    <span class="text-2xl">📦</span>
+                                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300 leading-tight">Packaging</span>
+                                </div>
+                                <div class="product-card" onclick="selectProduct('autre', this)" data-val="autre">
+                                    <span class="text-2xl">✨</span>
+                                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300 leading-tight">Autre</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- STEP 2 : Quantity -->
+                        <div class="space-y-2 pt-1">
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider">2. Quantité</label>
+                            <div class="flex items-center gap-3">
+                                <button type="button" class="qty-btn" onclick="changeQty(-10)">−</button>
+                                <input type="number" id="order-qty" min="1" value="100" class="flex-1 text-center font-black text-gray-900 dark:text-white py-2.5 rounded-xl border-2 border-gray-100 dark:border-gray-700 focus:outline-none focus:border-orange-500 bg-white dark:bg-gray-800 text-sm">
+                                <button type="button" class="qty-btn" onclick="changeQty(10)">+</button>
+                            </div>
+                        </div>
+
+                        <!-- STEP 3 : Finitions accordion -->
+                        <div class="space-y-2 pt-1">
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider">3. Options de Finition</label>
+                            <div class="border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
+                                <button type="button" onclick="toggleAccordion()" class="w-full flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition focus:outline-none">
+                                    <span class="flex items-center gap-2">
+                                        <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+                                        Finitions Premium
+                                    </span>
+                                    <svg id="accordion-chevron" class="w-4 h-4 transition-transform text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <div id="options-accordion-content" class="accordion-content">
+                                    <div class="p-4 space-y-3 border-t border-gray-100 dark:border-gray-700">
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Papier / Grammage</label>
+                                            <select id="finish-paper" onchange="updatePrice()" class="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:border-orange-500">
+                                                <option value="standard">Standard (135g)</option>
+                                                <option value="rigide_250g">Rigide (250g) +50 F/u</option>
+                                                <option value="premium_350g">Premium (350g) +100 F/u</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Finition Surface</label>
+                                            <select id="finish-surface" onchange="updatePrice()" class="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:border-orange-500">
+                                                <option value="mate">Mate Classique</option>
+                                                <option value="brillante">Brillante Vernie +50 F/u</option>
+                                                <option value="dorure">Dorure Or à chaud +200 F/u</option>
+                                                <option value="vernis_selectif">Vernis sélectif 3D +150 F/u</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Coins</label>
+                                            <select id="finish-corners" onchange="updatePrice()" class="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:border-orange-500">
+                                                <option value="square">Coins Carrés (Standard)</option>
+                                                <option value="rounded">Coins Arrondis +30 F/u</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Price estimate -->
+                        <div class="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-950/20 dark:to-yellow-950/10 rounded-2xl p-4 border border-orange-100 dark:border-orange-900/20 flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-gray-400 uppercase">Total estimé</p>
+                                <p class="text-xs text-gray-400 mt-0.5">hors TVA (18%)</p>
+                            </div>
+                            <div class="text-right">
+                                <span id="quick-order-price" class="text-2xl font-black text-orange-500">0 F</span>
+                                <p class="text-[10px] text-gray-400">CFA</p>
+                            </div>
+                        </div>
+
+                        <!-- STEP 4 : Instructions -->
+                        <div class="space-y-2 pt-1">
+                            <label for="order-desc" class="block text-xs font-bold text-gray-400 uppercase tracking-wider">4. Instructions</label>
+                            <textarea id="order-desc" rows="2" placeholder="Couleurs, format, consignes de marquage..." class="w-full px-4 py-3 text-sm rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:border-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none"></textarea>
+                        </div>
+
+                        <!-- STEP 5 : File upload -->
+                        <div class="space-y-2 pt-1">
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider">5. Votre fichier / logo</label>
+                            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('order-file').click()" ondrop="handleDrop(event)" ondragover="event.preventDefault(); this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')">
+                                <svg class="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                <p class="text-xs font-bold text-gray-400" id="drop-label">Glisser votre fichier ici</p>
+                                <p class="text-[10px] text-gray-300 mt-0.5">PNG, JPG, SVG, AI, PDF — max 15 Mo</p>
+                                <input type="file" id="order-file" class="hidden" accept="image/*,.pdf,.ai,.svg">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-gradient-to-r from-orange-500 to-yellow-400 text-white font-bold py-4 rounded-2xl shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 hover:scale-[1.01] transition flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                            Envoyer ma Demande
+                        </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- ====== HELP CARD ====== -->
+                <div class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm p-5 space-y-4">
+                    <h4 class="font-black text-gray-900 dark:text-white flex items-center gap-2 text-sm">
+                        <span class="w-7 h-7 bg-blue-100 dark:bg-blue-950/40 rounded-lg flex items-center justify-center">❓</span>
+                        Aide & Support
+                    </h4>
+
+                    <!-- FAQ -->
+                    <div class="space-y-2 text-xs">
+                        <details class="bg-gray-50 dark:bg-gray-800 rounded-xl">
+                            <summary class="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300 cursor-pointer list-none flex justify-between">
+                                Qu'est-ce que le BAT ?
+                                <svg class="w-3.5 h-3.5 text-gray-400 self-center" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
+                            </summary>
+                            <p class="px-4 pb-3 text-gray-500">Le BAT (Bon à Tirer) est la maquette finale de votre produit. Vous devez l'approuver ou demander des corrections avant le lancement en production.</p>
+                        </details>
+                        <details class="bg-gray-50 dark:bg-gray-800 rounded-xl">
+                            <summary class="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300 cursor-pointer list-none flex justify-between">
+                                Délai de production ?
+                                <svg class="w-3.5 h-3.5 text-gray-400 self-center" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
+                            </summary>
+                            <p class="px-4 pb-3 text-gray-500">En moyenne 3-7 jours ouvrables après validation du BAT, selon le produit et la quantité commandée.</p>
+                        </details>
+                        <details class="bg-gray-50 dark:bg-gray-800 rounded-xl">
+                            <summary class="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300 cursor-pointer list-none flex justify-between">
+                                Formats de fichier acceptés ?
+                                <svg class="w-3.5 h-3.5 text-gray-400 self-center" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
+                            </summary>
+                            <p class="px-4 pb-3 text-gray-500">PDF haute résolution (300 DPI), AI, EPS, PNG ou JPEG. Fichiers vectoriels préférés pour les logos et textes.</p>
+                        </details>
+                    </div>
+
+                    <!-- Contact rapide -->
+                    <div class="bg-green-50 dark:bg-green-950/20 rounded-2xl p-4 border border-green-100 dark:border-green-900/30">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="w-2 h-2 bg-green-500 rounded-full animate-[pulseDot_2s_infinite]"></span>
+                            <p class="text-xs font-bold text-green-700 dark:text-green-400">Équipe disponible (8h-18h)</p>
+                        </div>
+                        <a href="https://wa.me/2250700000000" target="_blank" class="flex items-center justify-center gap-2 w-full py-2.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded-xl transition">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                            Contacter sur WhatsApp
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- ====== MODAL FACTURE ====== -->
+<div id="invoice-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-3xl max-w-2xl w-full shadow-2xl mx-4 overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+            <h3 class="font-black text-gray-900 dark:text-white text-lg">Facture / Détails</h3>
+            <button onclick="closeInvoiceModal()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="overflow-y-auto flex-1">
+            <div id="invoice-print-area" class="bg-white p-6 text-gray-900">
+                <!-- Invoice header -->
+                <div class="flex justify-between items-start border-b border-gray-200 pb-6">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xl font-black bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">TOUCH+</span>
+                            <span class="text-xs font-bold text-gray-400">Services</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Plateau, Avenue Lamblin, Abidjan, CI</p>
+                        <p class="text-xs text-gray-500">+225 07 00 00 00 00 | contact@touchplus.ci</p>
+                    </div>
+                    <div class="text-right">
+                        <h2 class="text-2xl font-black text-orange-500">FACTURE</h2>
+                        <p class="text-sm font-bold text-gray-700 mt-1" id="invoice-number">N° TS-XXXXX</p>
+                        <p class="text-xs text-gray-500" id="invoice-date">Date : DD/MM/YYYY</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 py-5 border-b border-gray-100 text-xs">
+                    <div>
+                        <h4 class="font-bold text-gray-400 uppercase text-[10px] mb-1">Facturé à</h4>
+                        <p class="font-bold" id="invoice-client-name"></p>
+                        <p id="invoice-client-email" class="text-gray-500"></p>
+                        <p id="invoice-client-phone" class="text-gray-500"></p>
+                    </div>
+                    <div class="text-right">
+                        <h4 class="font-bold text-gray-400 uppercase text-[10px] mb-1">Livraison</h4>
+                        <p id="invoice-shipping-carrier" class="text-gray-600"></p>
+                        <p id="invoice-shipping-tracking" class="text-gray-600"></p>
+                        <p id="invoice-payment-status" class="mt-2 font-bold text-xs"></p>
+                    </div>
+                </div>
+
+                <table class="w-full text-left my-5 text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-200 text-gray-400 font-bold text-xs uppercase">
+                            <th class="py-2">Description</th>
+                            <th class="py-2 text-right">Qté</th>
+                            <th class="py-2 text-right">P.U.</th>
+                            <th class="py-2 text-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoice-items"></tbody>
+                </table>
+
+                <div class="border-t border-gray-200 pt-4 flex justify-end">
+                    <div class="w-60 text-sm space-y-1.5">
+                        <div class="flex justify-between text-gray-500"><span>Sous-total</span><span id="invoice-subtotal" class="font-bold text-gray-700">0 F</span></div>
+                        <div class="flex justify-between text-gray-500"><span>TVA (18%)</span><span id="invoice-tax" class="font-bold text-gray-700">0 F</span></div>
+                        <div class="flex justify-between font-black border-t border-gray-200 pt-2 text-base"><span>Total</span><span id="invoice-grand-total" class="text-orange-500">0 F CFA</span></div>
+                    </div>
+                </div>
+
+                <div class="mt-6 border-t border-gray-100 pt-4 text-center text-[10px] text-gray-400">
+                    Merci pour votre confiance — Touch+ Services, votre partenaire impression premium en Côte d'Ivoire.
+                </div>
+            </div>
+        </div>
+
+        <div class="p-5 border-t border-gray-100 dark:border-gray-700 flex gap-3">
+            <button onclick="closeInvoiceModal()" class="flex-1 bg-gray-100 dark:bg-gray-700 font-bold py-3 rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition text-sm">Fermer</button>
+            <button onclick="window.print()" class="flex-1 bg-gradient-to-r from-orange-500 to-yellow-400 text-white font-bold py-3 rounded-xl shadow-md hover:shadow-orange-300 transition text-sm flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                Imprimer / PDF
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ====== SCRIPTS ====== -->
+<script>
+    // ========================
+    // AUTH (verified in <head>, currentUser guaranteed to be a client)
+    // ========================
+    const currentUser = TouchDb.getCurrentUser();
+
+    // Set profile info
+    document.getElementById('client-name').textContent = currentUser.name;
+    document.getElementById('client-name-nav').textContent = currentUser.name.split(' ')[0];
+    document.getElementById('client-email').textContent = currentUser.email;
+    document.getElementById('user-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+    document.getElementById('hero-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+
+    document.getElementById('logout-btn').addEventListener('click', () => { TouchDb.logout(); });
+
+    // ========================
+    // HELPERS
+    // ========================
+    const productsName = {
+        tshirt: "T-shirt personnalisé", kakemono: "Kakemono vertical",
+        rollup: "Roll-up stand", flyer: "Impression Flyers",
+        packaging: "Packaging carton", autre: "Autre création"
+    };
+
+    const statusConfig = {
+        "Confirmée":  { color: "bg-blue-100 text-blue-700", dot: "bg-blue-400" },
+        "Maquette":   { color: "bg-yellow-100 text-yellow-700", dot: "bg-yellow-400" },
+        "BAT":        { color: "bg-purple-100 text-purple-700", dot: "bg-purple-500" },
+        "Production": { color: "bg-orange-100 text-orange-700", dot: "bg-orange-500" },
+        "Livraison":  { color: "bg-teal-100 text-teal-700", dot: "bg-teal-500" },
+        "Terminée":   { color: "bg-green-100 text-green-700", dot: "bg-green-500" }
+    };
+
+    window.scrollToOrder = function() {
+        document.getElementById('order-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ========================
+    // PRODUCT SELECTOR
+    // ========================
+    window.selectProduct = function(val, el) {
+        document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+        document.getElementById('product-type').value = val;
+        updatePrice();
+    }
+
+    // ========================
+    // QTY SPINNER
+    // ========================
+    window.changeQty = function(delta) {
+        const inp = document.getElementById('order-qty');
+        const newVal = Math.max(1, (parseInt(inp.value) || 0) + delta);
+        inp.value = newVal;
+        updatePrice();
+    }
+    document.getElementById('order-qty').addEventListener('input', updatePrice);
+
+    // ========================
+    // ACCORDION
+    // ========================
+    window.toggleAccordion = function() {
+        const content = document.getElementById('options-accordion-content');
+        const chevron = document.getElementById('accordion-chevron');
+        content.classList.toggle('open');
+        chevron.style.transform = content.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+
+    // ========================
+    // PRICING
+    // ========================
+    function getUnitPrice(product, options = {}) {
+        let unit = { tshirt: 3500, kakemono: 15000, rollup: 25000, flyer: 150, packaging: 800, autre: 5000 }[product] || 5000;
+        if (options.printing_side === 'both') unit += 1000;
+        if (options.paper === 'rigide_250g') unit += 50;
+        if (options.paper === 'premium_350g') unit += 100;
+        if (options.surface === 'brillante') unit += 50;
+        if (options.surface === 'dorure') unit += 200;
+        if (options.surface === 'vernis_selectif') unit += 150;
+        if (options.corners === 'rounded') unit += 30;
+        return unit;
+    }
+
+    function updatePrice() {
+        const product = document.getElementById('product-type').value;
+        const qty = parseInt(document.getElementById('order-qty').value) || 1;
+        const options = {
+            paper: document.getElementById('finish-paper').value,
+            surface: document.getElementById('finish-surface').value,
+            corners: document.getElementById('finish-corners').value
+        };
+        const total = qty * getUnitPrice(product, options);
+        document.getElementById('quick-order-price').textContent = total.toLocaleString() + ' F';
+    }
+
+    // ========================
+    // FILE DROP
+    // ========================
+    let droppedFile = null;
+
+    function handleDrop(e) {
+        e.preventDefault();
+        document.getElementById('drop-zone').classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            droppedFile = file;
+            document.getElementById('drop-label').textContent = "✓ " + file.name;
+        }
+    }
+
+    document.getElementById('order-file').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            droppedFile = null;
+            document.getElementById('drop-label').textContent = "✓ " + file.name;
+        }
+    });
+
+    // ========================
+    // LOAD ORDERS
+    // ========================
+    let localOrdersCache = [];
+
+    window.loadOrders = async function() {
+        const container = document.getElementById('orders-container');
+        container.innerHTML = `<div class="py-16 text-center text-gray-400 bg-white dark:bg-gray-800 rounded-3xl">
+            <svg class="w-8 h-8 mx-auto mb-3 opacity-40 animate-spin" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Chargement…</div>`;
+
+        const result = await TouchDb.getClientOrders(currentUser.id);
+        if (!result.success) {
+            container.innerHTML = `<div class="bg-red-50 text-red-700 p-5 rounded-2xl font-bold text-sm">Erreur lors du chargement.</div>`;
+            return;
+        }
+
+        const orders = result.orders;
+        localOrdersCache = orders;
+
+        // Update stats
+        document.getElementById('stat-active').textContent = orders.filter(o => !['Terminée'].includes(o.status)).length;
+        document.getElementById('stat-done').textContent = orders.filter(o => o.status === 'Terminée').length;
+        document.getElementById('stat-bat').textContent = orders.filter(o => o.status === 'BAT').length;
+
+        if (orders.length === 0) {
+            container.innerHTML = `
+                <div class="py-16 text-center bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700">
+                    <div class="text-5xl mb-4">📦</div>
+                    <p class="font-bold text-gray-700 dark:text-gray-300">Aucune commande pour l'instant</p>
+                    <p class="text-sm text-gray-400 mt-1">Utilisez le formulaire pour passer votre première commande !</p>
+                    <button onclick="scrollToOrder()" class="mt-5 inline-flex items-center gap-2 bg-orange-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-orange-600 transition">
+                        ➕ Nouvelle commande
+                    </button>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = "";
+        orders.forEach((order, i) => {
+            const card = createOrderCard(order, i);
+            container.appendChild(card);
+        });
+    }
+
+    // ========================
+    // TIMELINE
+    // ========================
+    const allSteps = ["Confirmée","Maquette","BAT","Production","Livraison","Terminée"];
+    const stepLabels = ["Confirmée","Maquette","BAT Validé","Production","Livraison","Terminée"];
+    const stepIcons = ["📋","🎨","✅","⚙️","🚚","🎉"];
+
+    function buildTimeline(currentStatus) {
+        const curIdx = allSteps.indexOf(currentStatus);
+        let html = `<div class="flex items-center w-full">`;
+        allSteps.forEach((s, i) => {
+            const done = i < curIdx;
+            const cur = i === curIdx;
+            const pending = i > curIdx;
+
+            let dotClass = pending ? 'pending' : (cur ? 'current' : 'done');
+            let innerContent = done ? '✓' : (cur ? stepIcons[i] : (i + 1));
+
+            html += `<div class="flex flex-col items-center gap-1" style="flex: ${i === 0 || i === allSteps.length - 1 ? '0 0 auto' : '1'}">
+                <div class="step-dot ${dotClass}">${innerContent}</div>
+                <p class="text-[9px] font-bold uppercase text-center leading-tight max-w-[40px] ${cur ? 'text-orange-500' : 'text-gray-400'} hidden sm:block">${stepLabels[i]}</p>
+            </div>`;
+
+            if (i < allSteps.length - 1) {
+                html += `<div class="step-line ${done ? 'done' : ''} mb-4 mx-0.5"></div>`;
+            }
+        });
+        html += `</div>`;
+        return html;
+    }
+
+    // ========================
+    // ORDER CARD
+    // ========================
+    function createOrderCard(order, i) {
+        const wrap = document.createElement('div');
+        wrap.className = "order-card";
+        wrap.style.animationDelay = (i * 0.08) + "s";
+
+        const cfg = statusConfig[order.status] || { color: "bg-gray-100 text-gray-600", dot: "bg-gray-300" };
+        const productName = productsName[order.product] || order.product;
+        const formattedDate = new Date(order.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        // Thumb
+        let thumbHTML = "";
+        if (order.options && order.options.preview_image) {
+            thumbHTML = `<img src="${order.options.preview_image}" class="w-16 h-16 rounded-xl object-cover border-2 border-gray-100 dark:border-gray-700 flex-shrink-0" alt="Aperçu">`;
+        } else if (order.mockup_url) {
+            thumbHTML = `<img src="${order.mockup_url}" class="w-16 h-16 rounded-xl object-cover border-2 border-gray-100 dark:border-gray-700 flex-shrink-0" alt="BAT">`;
+        }
+
+        // Finish tags
+        const paperMap = { standard: "135g", rigide_250g: "250g Rigide", premium_350g: "350g Premium" };
+        const surfMap = { mate: "Mat", brillante: "Brillant", dorure: "Dorure Or", vernis_selectif: "Vernis 3D" };
+        const cornersMap = { square: "Carrés", rounded: "Arrondis" };
+        let finishTags = "";
+        if (order.options) {
+            if (order.options.paper) finishTags += `<span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-500 dark:text-gray-400">${paperMap[order.options.paper]}</span>`;
+            if (order.options.surface) finishTags += `<span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-500 dark:text-gray-400">${surfMap[order.options.surface]}</span>`;
+            if (order.options.corners) finishTags += `<span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-500 dark:text-gray-400">${cornersMap[order.options.corners]}</span>`;
+        }
+
+        // Shipping info
+        let shipHTML = "";
+        if (order.shipping_carrier || order.shipping_tracking) {
+            shipHTML = `
+                <div class="bg-blue-50 dark:bg-blue-950/20 rounded-2xl p-4 border border-blue-100 dark:border-blue-900/30">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                        <p class="text-xs font-bold text-blue-700 dark:text-blue-400">Colis Expédié</p>
+                    </div>
+                    <div class="flex items-center justify-between gap-2 text-xs">
+                        <span class="text-gray-500">Via <strong>${order.shipping_carrier || 'DHL'}</strong></span>
+                        <div class="flex items-center gap-1.5">
+                            <code class="font-mono font-bold bg-white dark:bg-gray-800 border border-blue-200 dark:border-gray-700 px-2 py-0.5 rounded text-blue-600 dark:text-blue-400">${order.shipping_tracking || '—'}</code>
+                            <button class="copy-btn" onclick="navigator.clipboard.writeText('${order.shipping_tracking}').then(()=>{ this.textContent='✓ Copié!'; setTimeout(()=>this.textContent='Copier',2000) })">Copier</button>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // BAT section
+        let batHTML = "";
+        if (order.status === 'BAT' && order.mockup_url) {
+            batHTML = `
+                <div class="bg-purple-50 dark:bg-purple-950/20 rounded-2xl p-5 border-2 border-purple-200 dark:border-purple-900/30">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                        <p class="font-bold text-purple-700 dark:text-purple-400 text-sm">Maquette à valider (BAT)</p>
+                    </div>
+                    <a href="${order.mockup_url}" target="_blank" class="block rounded-xl overflow-hidden border border-purple-200 dark:border-purple-900/40 mb-4 hover:shadow-md transition">
+                        <img src="${order.mockup_url}" alt="Maquette BAT" class="w-full max-h-48 object-contain bg-white">
+                    </a>
+                    <textarea id="bat-comments-${order.id}" rows="2" placeholder="Vos remarques ou corrections si refusé..." class="w-full px-3 py-2 text-xs border border-purple-200 dark:border-purple-900/30 rounded-xl focus:outline-none focus:border-purple-500 bg-white dark:bg-gray-900 mb-3 text-gray-700 dark:text-gray-300"></textarea>
+                    <div class="flex gap-3">
+                        <button onclick="respondToBAT('${order.id}', false)" class="flex-1 flex items-center justify-center gap-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-950/40 dark:hover:bg-red-950/60 text-red-700 dark:text-red-400 font-bold py-2.5 rounded-xl text-xs transition">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                            Refuser &amp; Corriger
+                        </button>
+                        <button onclick="respondToBAT('${order.id}', true)" class="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-green-500 to-emerald-400 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-green-500/20 transition hover:shadow-green-500/30">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                            Approuver &amp; Lancer
+                        </button>
+                    </div>
+                </div>`;
+        } else if (order.client_comments) {
+            batHTML = `<div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 text-xs text-gray-500 italic border border-gray-100 dark:border-gray-700">💬 ${order.client_comments}</div>`;
+        }
+
+        // Payment badge
+        const isPaid = order.payment_status === 'Payé';
+        const payBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isPaid ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${order.payment_status || 'En attente'}</span>`;
+
+        // Attached file
+        let fileHTML = "";
+        if (order.options && order.options.attached_file) {
+            const fn = order.options.attached_file_name || "Fichier joint";
+            fileHTML = `<a href="${order.options.attached_file}" target="_blank" class="inline-flex items-center gap-1.5 text-[10px] text-orange-600 bg-orange-50 dark:bg-orange-950/20 px-2 py-1 rounded-lg border border-orange-100 dark:border-orange-900/20 font-bold hover:underline">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                ${fn}
+            </a>`;
+        }
+
+        wrap.innerHTML = `
+            <!-- Top stripe -->
+            <div class="h-1 w-full ${statusConfig[order.status]?.dot || 'bg-gray-300'}"></div>
+
+            <div class="p-5 sm:p-6 space-y-4">
+                <!-- Header -->
+                <div class="flex justify-between items-start gap-4 flex-wrap">
+                    <div class="flex gap-3 items-start">
+                        ${thumbHTML}
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                <span class="text-[10px] font-mono font-bold text-gray-400">#${order.id}</span>
+                                <span class="status-badge ${cfg.color}">
+                                    <span class="w-1.5 h-1.5 rounded-full ${cfg.dot}"></span>
+                                    ${order.status}
+                                </span>
+                                ${payBadge}
+                            </div>
+                            <h3 class="font-black text-gray-900 dark:text-white">${productName} <span class="font-medium text-gray-400">×${order.quantity}</span></h3>
+                            <p class="text-xs text-gray-400 mt-0.5">${formattedDate}</p>
+                            ${finishTags ? `<div class="flex flex-wrap gap-1 mt-1.5">${finishTags}</div>` : ''}
+                            ${fileHTML ? `<div class="mt-1.5">${fileHTML}</div>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="reorderProduct('${order.product}', '${order.quantity}', '${(order.notes||'').replace(/'/g,'&apos;')}')" class="flex items-center gap-1.5 text-xs font-bold text-orange-500 hover:text-white hover:bg-orange-500 border border-orange-200 dark:border-orange-800 hover:border-orange-500 px-3 py-1.5 rounded-xl transition">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Recommander
+                        </button>
+                        <button onclick="openInvoiceModal('${order.id}')" class="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-orange-500 border border-gray-200 dark:border-gray-700 hover:border-orange-300 px-3 py-1.5 rounded-xl transition">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            Facture
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                ${order.notes ? `<p class="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-700">📝 ${order.notes}</p>` : ''}
+
+                <!-- Timeline -->
+                <div class="pt-1">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase mb-3 tracking-wider">Progression</p>
+                    ${buildTimeline(order.status)}
+                </div>
+
+                <!-- Shipping -->
+                ${shipHTML}
+
+                <!-- BAT -->
+                ${batHTML}
+            </div>
+        `;
+        return wrap;
+    }
+
+    // ========================
+    // BAT RESPONSE
+    // ========================
+    window.respondToBAT = async function(orderId, approved) {
+        const comment = (document.getElementById(`bat-comments-${orderId}`) || {}).value?.trim() || '';
+        if (!approved && !comment) {
+            alert("Veuillez indiquer les corrections demandées.");
+            return;
+        }
+        const result = await TouchDb.validateBAT(orderId, approved, comment);
+        if (result.success) {
+            loadOrders();
+        } else {
+            alert("Erreur : " + result.error);
+        }
+    }
+
+    // ========================
+    // REORDER PRODUCT
+    // ========================
+    window.reorderProduct = function(product, quantity, notes) {
+        // Select the product card
+        const card = document.querySelector(`[data-val="${product}"]`);
+        if (card) selectProduct(product, card);
+
+        // Set quantity
+        const qtyInput = document.getElementById('order-qty');
+        if (qtyInput) { qtyInput.value = quantity; }
+
+        // Pre-fill notes with reorder context
+        const notesInput = document.getElementById('order-desc');
+        if (notesInput) { notesInput.value = 'Renouvellement de commande similaire. ' + (notes || ''); }
+
+        updatePrice();
+        scrollToOrder();
+    }
+
+    // ========================
+    // INVOICE MODAL
+    // ========================
+    window.openInvoiceModal = function(orderId) {
+        const order = localOrdersCache.find(o => o.id === orderId);
+        if (!order) return;
+
+        document.getElementById('invoice-number').textContent = `N° TS-${order.id}`;
+        document.getElementById('invoice-date').textContent = `Date : ${new Date(order.date).toLocaleDateString('fr-FR')}`;
+        document.getElementById('invoice-client-name').textContent = currentUser.name;
+        document.getElementById('invoice-client-email').textContent = currentUser.email;
+        document.getElementById('invoice-client-phone').textContent = currentUser.phone;
+        document.getElementById('invoice-shipping-carrier').textContent = `Via : ${order.shipping_carrier || '—'}`;
+        document.getElementById('invoice-shipping-tracking').textContent = `Suivi : ${order.shipping_tracking || '—'}`;
+        document.getElementById('invoice-payment-status').innerHTML = `Paiement : <span class="${order.payment_status === 'Payé' ? 'text-green-600' : 'text-red-500'}">${order.payment_status || 'En attente'}</span>`;
+
+        const tbody = document.getElementById('invoice-items');
+        tbody.innerHTML = "";
+
+        const baseUnit = { tshirt: 3500, kakemono: 15000, rollup: 25000, flyer: 150, packaging: 800, autre: 5000 }[order.product] || 5000;
+        const baseTotal = baseUnit * order.quantity;
+        const prodName = productsName[order.product] || order.product;
+
+        tbody.innerHTML += `<tr class="border-b border-gray-100 text-gray-700">
+            <td class="py-3 text-xs">${prodName}</td>
+            <td class="py-3 text-right text-xs">${order.quantity}</td>
+            <td class="py-3 text-right text-xs">${baseUnit.toLocaleString()} F</td>
+            <td class="py-3 text-right text-xs font-bold">${baseTotal.toLocaleString()} F</td>
+        </tr>`;
+
+        let additionalSum = 0;
+        if (order.options) {
+            const addRow = (title, cost) => {
+                const rowTotal = cost * order.quantity;
+                tbody.innerHTML += `<tr class="border-b border-gray-100 text-gray-400 text-xs italic">
+                    <td class="py-1.5 pl-4">└ ${title}</td>
+                    <td class="py-1.5 text-right">${order.quantity}</td>
+                    <td class="py-1.5 text-right">${cost} F</td>
+                    <td class="py-1.5 text-right">${rowTotal.toLocaleString()} F</td>
+                </tr>`;
+                additionalSum += rowTotal;
+            };
+            if (order.options.paper === 'rigide_250g') addRow("Papier Rigide 250g", 50);
+            if (order.options.paper === 'premium_350g') addRow("Papier Premium 350g", 100);
+            if (order.options.surface === 'brillante') addRow("Finition Brillante", 50);
+            if (order.options.surface === 'dorure') addRow("Dorure Or à chaud", 200);
+            if (order.options.surface === 'vernis_selectif') addRow("Vernis Sélectif 3D", 150);
+            if (order.options.corners === 'rounded') addRow("Coins Arrondis", 30);
+            if (order.options.printing_side === 'both') addRow("Double Face", 1000);
+        }
+
+        const subtotal = baseTotal + additionalSum;
+        const tva = Math.round(subtotal * 0.18);
+        const grand = subtotal + tva;
+
+        document.getElementById('invoice-subtotal').textContent = subtotal.toLocaleString() + " F CFA";
+        document.getElementById('invoice-tax').textContent = tva.toLocaleString() + " F CFA";
+        document.getElementById('invoice-grand-total').textContent = grand.toLocaleString() + " F CFA";
+
+        document.getElementById('invoice-modal').classList.remove('hidden');
+    }
+
+    window.closeInvoiceModal = function() {
+        document.getElementById('invoice-modal').classList.add('hidden');
+    }
+
+    document.getElementById('invoice-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeInvoiceModal();
+    });
+
+    // ========================
+    // SUBMIT ORDER
+    // ========================
+    document.getElementById('quick-order-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const errEl = document.getElementById('order-error');
+        const succEl = document.getElementById('order-success');
+        errEl.classList.add('hidden');
+        succEl.classList.add('hidden');
+
+        const product = document.getElementById('product-type').value;
+        const qty = parseInt(document.getElementById('order-qty').value) || 1;
+        const notes = document.getElementById('order-desc').value.trim();
+        const fileInput = document.getElementById('order-file');
+
+        let fileData = null;
+        const fileObj = droppedFile || (fileInput.files.length > 0 ? fileInput.files[0] : null);
+        if (fileObj) {
+            const base64 = await new Promise(res => {
+                const r = new FileReader();
+                r.onload = e => res(e.target.result);
+                r.readAsDataURL(fileObj);
+            });
+            fileData = { base64, name: fileObj.name };
+        }
+
+        const options = {
+            paper: document.getElementById('finish-paper').value,
+            surface: document.getElementById('finish-surface').value,
+            corners: document.getElementById('finish-corners').value
+        };
+
+        const result = await TouchDb.createOrder(product, qty, notes, options, fileData);
+        if (result.success) {
+            succEl.classList.remove('hidden');
+            this.reset();
+            document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+            document.querySelector('[data-val="tshirt"]').classList.add('selected');
+            document.getElementById('product-type').value = 'tshirt';
+            document.getElementById('options-accordion-content').classList.remove('open');
+            document.getElementById('accordion-chevron').style.transform = 'rotate(0deg)';
+            document.getElementById('drop-label').textContent = "Glisser votre fichier ici";
+            droppedFile = null;
+            updatePrice();
+            setTimeout(() => succEl.classList.add('hidden'), 4000);
+            loadOrders();
+        } else {
+            errEl.textContent = "Erreur : " + result.error;
+            errEl.classList.remove('hidden');
+        }
+    });
+
+    // ========================
+    // INIT
+    // ========================
+    updatePrice();
+    loadOrders();
+
+    // Check for pending reorder from localStorage
+    const pendingReorder = localStorage.getItem('touchplus_pending_reorder');
+    if (pendingReorder) {
+        try {
+            const data = JSON.parse(pendingReorder);
+            if (data.product) {
+                const card = document.querySelector(`[data-val="${data.product}"]`);
+                if (card) {
+                    selectProduct(data.product, card);
+                }
+            }
+            if (data.notes) {
+                document.getElementById('order-desc').value = data.notes;
+            }
+            updatePrice();
+            setTimeout(() => {
+                scrollToOrder();
+            }, 300);
+        } catch (e) {
+            console.error("Error loading pending reorder", e);
+        }
+        localStorage.removeItem('touchplus_pending_reorder');
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,670 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================
+// RBAC — Role Based Access Control
+// =============================================================
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique // "ADMIN", "COMMERCIAL", "PRODUCTION", "EDITOR", "CLIENT"
+  label       String           // "Administrateur", "Commercial", "Opérateur presse"
+  description String?
+  color       String?          // Hex color for UI badges
+  isSystem    Boolean @default(false) // System roles cannot be deleted
+
+  userRoles   UserRole[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  module      String  // "orders", "quotes", "cms", "users", "analytics", "settings", "production"
+  action      String  // "read", "write", "delete", "manage"
+  label       String  // Human-readable label
+  description String?
+
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+  assignedBy String?  // User ID of the admin who assigned this role
+
+  @@id([userId, roleId])
+}
+
+// =============================================================
+// USERS
+// =============================================================
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  name        String?
+  phone       String?
+  password    String?
+
+  // B2B Company Info
+  company     String?
+  companyType String?  // "SARL", "SA", "EI", "ONG"
+  address     String?
+  city        String?
+  country     String?  @default("CI")
+  taxId       String?  // RCCM or equivalent
+
+  // Profile
+  avatarUrl   String?  // External link (Drive, etc.)
+  bio         String?
+  isActive    Boolean  @default(true)
+  isVerified  Boolean  @default(false)
+  lastLoginAt DateTime?
+
+  // Quick role check (synced with UserRole, denormalized for performance)
+  primaryRole String   @default("CLIENT") // "ADMIN", "COMMERCIAL", "PRODUCTION", "EDITOR", "CLIENT"
+
+  // Notification preferences
+  notifyEmail   Boolean @default(true)
+  notifyInApp   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userRoles     UserRole[]
+  orders        Order[]
+  quotes        Quote[]
+  orderMessages OrderMessage[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  assignedJobs  Order[]        @relation("AssignedOrders")
+  addresses     UserAddress[]
+
+  @@index([email])
+  @@index([primaryRole])
+}
+
+model UserAddress {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  label     String  // "Siège social", "Point de vente Cocody", "Entrepôt"
+  address   String  // Full street address
+  city      String  @default("Abidjan")
+  country   String  @default("CI")
+  phone     String? // Contact phone at this address
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// =============================================================
+// PRODUCT CATALOG
+// =============================================================
+
+model ProductCategory {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?  // External link
+  orderIndex  Int      @default(0)
+  isActive    Boolean  @default(true)
+  metaTitle   String?
+  metaDesc    String?
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id          String          @id @default(uuid())
+  categoryId  String
+  category    ProductCategory @relation(fields: [categoryId], references: [id])
+
+  name        String
+  slug        String  @unique
+  description String?
+  fullDesc    String? // Rich text / HTML
+
+  basePrice   Float   @default(0)
+  unit        String  @default("unité") // "unité", "m²", "feuille", "lot"
+  minQuantity Int     @default(1)
+  maxQuantity Int?
+  leadTimeDays Int    @default(3) // Standard production days
+
+  // Configurable options stored as JSON arrays
+  // Format: [{ "label": "A4", "code": "a4", "priceModifier": 0, "description": "210x297mm" }]
+  formats     Json?
+  finishes    Json?
+  materials   Json?
+  sizes       Json?
+  extras      Json?  // Any additional options
+
+  imageUrl    String? // External link
+  imageGallery Json?  // Array of external links
+
+  isActive    Boolean @default(true)
+  isFeatured  Boolean @default(false)
+  orderIndex  Int     @default(0)
+
+  metaTitle   String?
+  metaDesc    String?
+
+  orderItems  OrderItem[]
+  quoteItems  QuoteItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive, isFeatured])
+}
+
+// =============================================================
+// ORDERS
+// =============================================================
+
+model Order {
+  id        String @id @default(cuid())
+  reference String @unique // TPS-2024-0001
+
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+
+  // Optional: created from a quote
+  quoteId   String? @unique
+  quote     Quote?  @relation(fields: [quoteId], references: [id])
+
+  // Optional: assigned to a production staff member
+  assignedToId String?
+  assignedTo   User?   @relation("AssignedOrders", fields: [assignedToId], references: [id])
+  machine      String? // e.g. "Presse Numérique A"
+  operatorNotes String? // internal production notes
+
+  // Status (string for flexibility — not enum)
+  status   String @default("PENDING")
+  // PENDING | CONFIRMED | MOCKUP | BAT_SENT | BAT_APPROVED | PRODUCTION | QUALITY_CHECK | READY | SHIPPED | DELIVERED | CANCELLED | ON_HOLD
+
+  priority String @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+
+  // Commercial
+  subtotal      Float   @default(0)
+  discountType  String? // "PERCENT" | "FIXED"
+  discountValue Float   @default(0)
+  discount      Float   @default(0)
+  total         Float   @default(0)
+  currency      String  @default("XOF")
+
+  // Payment
+  paymentStatus  String  @default("UNPAID") // UNPAID | PARTIAL | PAID | REFUNDED
+  paymentMethod  String? // "CASH" | "MOBILE_MONEY" | "TRANSFER" | "CHECK"
+  paymentRef     String?
+  paidAt         DateTime?
+  paidAmount     Float   @default(0)
+
+  // Logistics
+  shippingMethod  String? // "PICKUP" | "DELIVERY" | "EXPRESS"
+  shippingAddress String?
+  shippingCity    String?
+  shippingCost    Float   @default(0)
+  trackingNumber  String?
+
+  // Dates
+  expectedDeliveryDate DateTime?
+  deliveredAt          DateTime?
+
+  // Notes
+  clientNotes   String? // From client during order
+  internalNotes String? // Admin/production notes (hidden from client)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  items    OrderItem[]
+  files    OrderFile[]
+  messages OrderMessage[]
+  timeline OrderTimeline[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id      String  @id @default(uuid())
+  orderId String
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  // Snapshot at time of order (in case product changes)
+  productName String
+  quantity    Int
+  unitPrice   Float
+  total       Float
+
+  // Selected options (snapshot)
+  selectedFormat   String?
+  selectedFinish   String?
+  selectedMaterial String?
+  selectedSize     String?
+  options          Json?
+
+  notes String?
+}
+
+model OrderFile {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  name       String // "Fichier source", "Maquette v2", "BAT Final"
+  url        String // External link: Drive, WeTransfer, Canva...
+  password   String? // Optionnel pour liens WeTransfer/OneDrive protégés
+  type       String // "SOURCE" | "MOCKUP" | "BAT" | "APPROVED_BAT" | "DELIVERY_NOTE" | "INVOICE" | "OTHER"
+  status     String @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  uploadedBy String? // User ID
+  notes      String?
+  fileSize   String? // Human-readable: "2.4 MB"
+  mimeType   String? // "application/pdf", "image/png"
+
+  // Link expiration tracking (WeTransfer = 7 days, etc.)
+  expiresAt  DateTime?
+  alertSent  Boolean @default(false) // True once expiration alert was sent
+
+  createdAt DateTime @default(now())
+}
+
+model OrderMessage {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  content    String
+  isInternal Boolean @default(false) // Internal = only visible to staff
+  isRead     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model OrderTimeline {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  status    String
+  note      String?
+  changedBy String? // User ID
+
+  createdAt DateTime @default(now())
+}
+
+// =============================================================
+// QUOTES
+// =============================================================
+
+model Quote {
+  id        String @id @default(uuid())
+  reference String @unique // DEVIS-2024-0001
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  status String @default("DRAFT")
+  // DRAFT | SENT | VIEWED | ACCEPTED | REJECTED | EXPIRED | CONVERTED
+
+  // Commercial
+  subtotal      Float   @default(0)
+  discountType  String?
+  discountValue Float   @default(0)
+  discount      Float   @default(0)
+  total         Float   @default(0)
+  currency      String  @default("XOF")
+  taxRate       Float   @default(0)
+  taxAmount     Float   @default(0)
+
+  validUntil    DateTime?
+  notes         String?  // Visible to client
+  internalNotes String?  // Admin only
+
+  // Timestamps
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  acceptedAt  DateTime?
+  rejectedAt  DateTime?
+  expiredAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items QuoteItem[]
+  files QuoteFile[]
+  order Order?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model QuoteItem {
+  id      String @id @default(uuid())
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  productName      String
+  quantity         Int
+  unitPrice        Float
+  total            Float
+  selectedFormat   String?
+  selectedFinish   String?
+  selectedMaterial String?
+  selectedSize     String?
+  options          Json?
+  notes            String?
+}
+
+// =============================================================
+// CMS — Site Configuration
+// =============================================================
+
+model SiteConfig {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+  type  String @default("text") // "text" | "url" | "color" | "json" | "boolean" | "number" | "richtext"
+  group String @default("general") // "general" | "seo" | "social" | "branding" | "contact" | "email"
+  label String?
+
+  updatedAt DateTime @updatedAt
+}
+
+model Banner {
+  id         String  @id @default(uuid())
+  title      String
+  subtitle   String?
+  ctaText    String?
+  ctaUrl     String?
+  imageUrl   String? // External link
+  videoUrl   String? // External link
+  bgColor    String? // Hex
+  textColor  String?
+  page       String  @default("home") // "home" | "services" | "contact" | "about"
+  isActive   Boolean @default(true)
+  orderIndex Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =============================================================
+// CMS — Content
+// =============================================================
+
+model Post {
+  id          String  @id @default(uuid())
+  title       String
+  slug        String  @unique
+  excerpt     String?
+  content     String  // Rich text / HTML
+  imageUrl    String? // External link
+  category    String  @default("general")
+  tags        String? // Comma-separated
+
+  authorId    String?
+  author      String? // Name snapshot
+
+  metaTitle   String?
+  metaDesc    String?
+  ogImage     String? // External link
+
+  isPublished Boolean  @default(false)
+  publishedAt DateTime?
+  viewCount   Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isPublished, publishedAt])
+}
+
+model Portfolio {
+  id          String  @id @default(uuid())
+  title       String
+  slug        String? @unique
+  clientName  String?
+  description String?
+  imageUrl    String  // External link (MANDATORY)
+  beforeUrl   String? // Before/After comparison
+  videoUrl    String? // External video link
+
+  category    String  @default("impression")
+  tags        String?
+  
+  isPublished Boolean @default(true)
+  isFeatured  Boolean @default(false)
+  orderIndex  Int     @default(0)
+
+  metaTitle   String?
+  metaDesc    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isPublished, isFeatured])
+}
+
+model Service {
+  id          String  @id @default(uuid())
+  title       String
+  slug        String? @unique
+  description String
+  fullDesc    String? // Rich text
+  iconSvg     String?
+  imageUrl    String? // External link
+  price       String?
+  colorHint   String?
+
+  isActive    Boolean @default(true)
+  isFeatured  Boolean @default(false)
+  orderIndex  Int     @default(0)
+
+  metaTitle   String?
+  metaDesc    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TeamMember {
+  id         String  @id @default(uuid())
+  name       String
+  jobTitle   String
+  bio        String?
+  imageUrl   String? // External link
+  email      String?
+  phone      String?
+  linkedin   String?
+  twitter    String?
+
+  isActive   Boolean @default(true)
+  orderIndex Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Testimonial {
+  id          String  @id @default(uuid())
+  clientName  String
+  company     String?
+  jobTitle    String?
+  avatarUrl   String? // External link
+  rating      Int     @default(5)
+  content     String
+  isPublished Boolean @default(true)
+  isFeatured  Boolean @default(false)
+  orderIndex  Int     @default(0)
+
+  createdAt DateTime @default(now())
+}
+
+model FAQ {
+  id          String  @id @default(uuid())
+  question    String
+  answer      String
+  category    String  @default("general")
+  orderIndex  Int     @default(0)
+  isPublished Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Partner {
+  id         String  @id @default(uuid())
+  name       String
+  logoUrl    String  // External link
+  websiteUrl String?
+  orderIndex Int     @default(0)
+  isActive   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+}
+
+// =============================================================
+// NOTIFICATIONS
+// =============================================================
+
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    String // "ORDER_STATUS" | "BAT_READY" | "MESSAGE" | "QUOTE" | "SYSTEM"
+  title   String
+  body    String?
+  link    String? // Route to navigate on click
+  isRead  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+// =============================================================
+// AUDIT LOG
+// =============================================================
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  module     String  // "orders" | "cms" | "users" | "settings" | "quotes"
+  action     String  // "create" | "update" | "delete" | "login" | "status_change" | "export"
+  entityType String? // "Order" | "User" | "Post" | "Product"
+  entityId   String?
+  label      String? // Human-readable description: "Statut commande #TPS-001 → PRODUCTION"
+
+  oldValue  Json?
+  newValue  Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([module, action])
+  @@index([createdAt])
+}
+
+// =============================================================
+// CONTACT
+// =============================================================
+
+model ContactMessage {
+  id        String  @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  service   String?
+  subject   String?
+  message   String
+  isRead    Boolean @default(false)
+  isReplied Boolean @default(false)
+  repliedAt DateTime?
+  repliedBy String?
+
+  createdAt DateTime @default(now())
+}
+
+// =============================================================
+// BACK-OFFICE NEW MODELS
+// =============================================================
+
+model QuoteFile {
+  id        String   @id @default(uuid())
+  quoteId   String
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  
+  name      String   @default("Fichier client")
+  url       String
+  password  String?
+  status    String   @default("ACTIVE") // "ACTIVE" | "EXPIRED"
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([quoteId])
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  trigger   String   @unique // "QUOTE_CONFIRMATION", "BAT_REMINDER", "INVOICE_UNPAID", "LINK_EXPIRING"
+  subject   String
+  body      String   // Contenu HTML/Markdown avec placeholders
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+

@@ -33,7 +33,7 @@ export async function loginAction(prevState, formData) {
   let redirectTo = '/dashboard/client';
   if (email) {
       try {
-          const dbUser = await prisma.user.findUnique({ where: { email } });
+          const dbUser = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
           if (dbUser?.primaryRole === 'ADMIN') {
               redirectTo = '/dashboard/admin';
           }
@@ -94,7 +94,7 @@ export async function registerAction(prevState, formData) {
   let redirectTo = '/dashboard/client';
   if (email) {
       try {
-          const dbUser = await prisma.user.findUnique({ where: { email } });
+          const dbUser = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
           if (dbUser?.primaryRole === 'ADMIN') {
               redirectTo = '/dashboard/admin';
           }

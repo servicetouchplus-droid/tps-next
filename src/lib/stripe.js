@@ -1,7 +1,9 @@
 import Stripe from 'stripe';
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2023-10-16', // Remplacez par la version actuelle souhaitée
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder_for_build_purposes';
+
+export const stripe = new Stripe(stripeSecretKey, {
+  apiVersion: '2023-10-16',
   appInfo: {
     name: 'Touch+ Services',
     version: '1.0.0'

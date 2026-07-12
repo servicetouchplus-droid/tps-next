@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { convertQuoteToOrderAction } from '@/app/actions/quote';
+import { convertQuoteToOrderAction, proposeQuotePriceAction } from '@/app/actions/quote';
 
 export default function QuotesListClient({ quotes, adminUsers }) {
   const [selectedQuote, setSelectedQuote] = useState(null);
@@ -22,7 +22,7 @@ export default function QuotesListClient({ quotes, adminUsers }) {
   ];
 
   async function handleConvert(e) {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!selectedQuote) return;
     if (!price || parseFloat(price) <= 0) {
       setErrorMsg("Veuillez saisir un tarif valide supérieur à 0.");
@@ -40,6 +40,34 @@ export default function QuotesListClient({ quotes, adminUsers }) {
       setErrorMsg(result.error);
     } else {
       setSuccessMsg("Devis converti en commande avec succès !");
+      setTimeout(() => {
+        setSelectedQuote(null);
+        setPrice('');
+        setSuccessMsg('');
+        window.location.reload();
+      }, 1500);
+    }
+  }
+
+  async function handleProposePrice(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!selectedQuote) return;
+    if (!price || parseFloat(price) <= 0) {
+      setErrorMsg("Veuillez saisir un tarif valide supérieur à 0.");
+      return;
+    }
+
+    setIsPending(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    const result = await proposeQuotePriceAction(selectedQuote.id, price);
+    
+    setIsPending(false);
+    if (result?.error) {
+      setErrorMsg(result.error);
+    } else {
+      setSuccessMsg("Proposition tarifaire envoyée au client avec succès !");
       setTimeout(() => {
         setSelectedQuote(null);
         setPrice('');
@@ -151,12 +179,15 @@ export default function QuotesListClient({ quotes, adminUsers }) {
                 </div>
               </div>
 
-              <div className="flex gap-3 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button type="button" onClick={() => setSelectedQuote(null)} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-colors">
+              <div className="flex flex-col sm:flex-row gap-2 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" onClick={() => setSelectedQuote(null)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-colors">
                   Annuler
                 </button>
-                <button type="submit" disabled={isPending} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50">
-                  {isPending ? "Traitement..." : "Confirmer & Lancer la commande"}
+                <button type="button" onClick={handleProposePrice} disabled={isPending} className="px-4 py-2.5 bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-85 text-xs font-bold rounded-xl transition-all disabled:opacity-50">
+                  Proposer le tarif (Envoi client)
+                </button>
+                <button type="submit" disabled={isPending} className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50">
+                  Confirmer & Lancer la commande
                 </button>
               </div>
             </form>

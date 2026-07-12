@@ -228,3 +228,30 @@ export async function clientAcceptQuoteAction(quoteId) {
   }
 }
 
+export async function proposeQuotePriceAction(quoteId, price) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Non authentifié." };
+
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+  if (dbUser?.primaryRole !== 'ADMIN') return { error: "Accès refusé." };
+
+  try {
+    const total = parseFloat(price) || 0;
+    await prisma.quote.update({
+      where: { id: quoteId },
+      data: {
+        total
+      }
+    });
+
+    revalidatePath('/dashboard/admin/quotes');
+    revalidatePath('/dashboard/client/quotes');
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur de proposition tarifaire devis:", error);
+    return { error: "Une erreur est survenue lors de la soumission de la proposition." };
+  }
+}
+

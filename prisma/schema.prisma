@@ -668,3 +668,19 @@ model EmailTemplate {
   updatedAt DateTime @updatedAt
 }
 
+model BestSeller {
+  id          String   @id @default(uuid())
+  category    String   // "Textile", "Carterie", "Grand Format", etc.
+  name        String   // "T-shirts Personnalisés"
+  priceText   String   // "dès 2 500 F"
+  imageUrl    String   // URL of the image
+  badge       String?  // "🔥 Best seller", "Nouveau", "−30%"
+  badgeColor  String?  // "purple", "red", "orange", "green" (used to apply Tailwind classes)
+  targetUrl   String   @default("/dashboard/client/new")
+  orderIndex  Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+

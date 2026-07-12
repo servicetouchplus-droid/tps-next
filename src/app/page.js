@@ -5,24 +5,28 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Link from 'next/link';
 import { getPremiumServices, getRealisations, getLatestPosts } from '@/app/actions/home';
+import { getBestSellers } from '@/app/actions/bestsellers';
 
 export default function Home() {
   const [services, setServices] = useState([]);
   const [realisations, setRealisations] = useState([]);
   const [posts, setPosts] = useState([]);
+  const [bestSellers, setBestSellers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [svcs, reals, pts] = await Promise.all([
+        const [svcs, reals, pts, bSellers] = await Promise.all([
           getPremiumServices(),
           getRealisations('all'),
-          getLatestPosts()
+          getLatestPosts(),
+          getBestSellers()
         ]);
         setServices(svcs);
         setRealisations(reals);
         setPosts(pts);
+        setBestSellers(bSellers);
       } catch (error) {
         console.error("Failed to load home data", error);
       } finally {
@@ -151,208 +155,43 @@ export default function Home() {
                     </Link>
                 </div>
 
-                {/* 12 Products Grid */}
+                {/* Dynamic Best Sellers Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
-
-                    {/* 1 - T-shirts */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=400&q=80" alt="T-shirt personnalisé" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                            <span className="absolute top-2.5 left-2.5 bg-purple-600 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow">🔥 Best seller</span>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    {loading ? (
+                        <div className="col-span-full flex justify-center py-12">
+                            <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
                         </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Textile</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">T-shirts Personnalisés</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 2 500 F</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 2 - Flyers */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1586281380117-5a60ae2050cc?w=400&h=300&fit=crop" alt="Flyers & Dépliants" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <span className="absolute top-2.5 left-2.5 bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow">−30%</span>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Carterie</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Flyers & Dépliants</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 150 F/u</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 3 - Cartes de visite */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1612838320302-4b3b3996e666?w=400&h=300&fit=crop" alt="Cartes de visite" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <span className="absolute top-2.5 left-2.5 bg-purple-600 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow">⭐ Top</span>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Carterie</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Cartes de Visite</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 200 F/u</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 4 - Kakémono */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=300&fit=crop" alt="Kakémono Roll-up" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Grand Format</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Kakémonos / Roll-up</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 25 000 F</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 5 - Casquettes */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&h=300&fit=crop" alt="Casquettes brodées" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Textile</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Casquettes Brodées</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 2 000 F</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 6 - Packaging */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1605000797499-95a51c5269ae?w=400&h=300&fit=crop" alt="Packaging carton" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow">✦ Sur mesure</span>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Packaging</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Packaging Carton</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 800 F/u</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 7 - Mugs */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=400&h=300&fit=crop" alt="Mugs personnalisés" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <span className="absolute top-2.5 left-2.5 bg-purple-600 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow">🔥 Populaire</span>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Goodies</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Mugs Personnalisés</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 2 500 F</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 8 - Bâches */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1516216628859-9bccecab13ca?w=400&h=300&fit=crop" alt="Bâches et banderoles" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <span className="absolute top-2.5 left-2.5 bg-orange-600 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow">✦ Bâche</span>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Grand Format</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Bâches & Banderoles</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 15 000 F</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 9 - Stylos */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1585336139057-3c50f31be15d?w=400&h=300&fit=crop" alt="Stylos publicitaires" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Goodies</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Stylos Publicitaires</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 150 F/u</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 10 - Polos */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=400&h=300&fit=crop" alt="Polos d'entreprise" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Textile</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Polos d&apos;Entreprise</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 5 500 F</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 11 - Autocollants */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1572375995301-4018d3eed5aa?w=400&h=300&fit=crop" alt="Autocollants" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Carterie</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Autocollants Découpés</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 50 F/u</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* 12 - Calendriers */}
-                    <Link href="/dashboard/client/new" className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-                        <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
-                            <img src="https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&h=300&fit=crop" alt="Calendriers de bureau" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-                            <span className="absolute top-2.5 left-2.5 bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow">Nouveau</span>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="p-4">
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Carterie</span>
-                            <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">Calendriers de Bureau</p>
-                            <div className="flex items-center justify-between mt-3">
-                                <p className="text-orange-500 font-black">dès 2 500 F/u</p>
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
-                            </div>
-                        </div>
-                    </Link>
-
+                    ) : bestSellers.length > 0 ? (
+                        bestSellers.map((item, index) => (
+                            <Link href={item.targetUrl || "/dashboard/client/new"} key={item.id} className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
+                                <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-700">
+                                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading={index > 3 ? "lazy" : "eager"} />
+                                    {item.badge && (
+                                        <span className={`absolute top-2.5 left-2.5 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow ${
+                                            item.badgeColor === 'purple' ? 'bg-purple-600' :
+                                            item.badgeColor === 'red' ? 'bg-red-500' :
+                                            item.badgeColor === 'orange' ? 'bg-orange-500' :
+                                            item.badgeColor === 'green' ? 'bg-green-500' :
+                                            'bg-gray-800'
+                                        }`}>
+                                            {item.badge}
+                                        </span>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                </div>
+                                <div className="p-4">
+                                    <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">{item.category}</span>
+                                    <p className="font-black text-gray-900 dark:text-white text-sm mt-0.5 leading-tight">{item.name}</p>
+                                    <div className="flex items-center justify-between mt-3">
+                                        <p className="text-orange-500 font-black">{item.priceText}</p>
+                                        <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg group-hover:bg-orange-600 transition-colors">Commander</span>
+                                    </div>
+                                </div>
+                            </Link>
+                        ))
+                    ) : (
+                        <div className="col-span-full text-center text-gray-500 py-10">Aucun produit disponible pour le moment.</div>
+                    )}
                 </div>
 
                 {/* Bottom CTA Banner */}
